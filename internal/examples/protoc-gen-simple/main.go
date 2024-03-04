@@ -40,7 +40,11 @@ func handle(
 	// plugin has not indicated it will support it.
 	responseWriter.AddFeatureProto3Optional()
 
-	for _, fileDescriptorProto := range request.GenerateFileDescriptorProtos() {
+	fileDescriptorProtos, err := request.GenerateFileDescriptorProtos()
+	if err != nil {
+		return err
+	}
+	for _, fileDescriptorProto := range fileDescriptorProtos {
 		topLevelMessageNames := make([]string, len(fileDescriptorProto.GetMessageType()))
 		for i, descriptorProto := range fileDescriptorProto.GetMessageType() {
 			topLevelMessageNames[i] = descriptorProto.GetName()
