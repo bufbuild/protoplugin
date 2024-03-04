@@ -57,9 +57,3 @@ issues:
     - linters:
       - protogetter
       path: protoplugin_test.go
-    - linters:
-      - exhaustruct
-      path: protoplugin.go
-    - linters:
-      - exhaustruct
-      path: response_writer.go
