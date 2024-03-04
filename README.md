@@ -42,7 +42,7 @@ If you are authoring `protoc` plugins that produce `.go` files, you
 should use [protogen](https://pkg.go.dev/google.golang.org/protobuf/compiler/protogen), as it has
 Golang-specific helpers, such as dealing with Golang import paths, and handling the standard Golang
 `protoc` plugin flags like `paths=source_relative`. However, `protogen` is very Golang-specific -
-the interface exposed doesn't really make sense outside of generating `.go` files, and you specifically
+the interfaces exposed don't really make sense outside of generating `.go` files, and you specifically
 do not want most plugins to expose the standard Golang `protoc` plugin flags. If you'd like to use `protogen`
 but also take advantage of `protoplugin`'s hardening, it's very easy to wrap `protogen` with
 `protoplugin` - see the [protoc-gen-protogen-simple](internal/examples/protoc-gen-protogen-simple/main.go)
