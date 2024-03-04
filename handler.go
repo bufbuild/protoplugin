@@ -29,6 +29,9 @@ type Handler interface {
 	//   - Each FileDescriptorProto in ProtoFile will have a valid path as the name field.
 	//   - Each value of FileToGenerate will be a valid path.
 	//   - Each value of FileToGenerate will have a corresponding value in ProtoFile.
+	//
+	// If SourceFileDescriptors is not empty:
+	//
 	//   - Each FileDescriptorProto in SourceFileDescriptors will have a valid path as the name field.
 	//   - The values of FileToGenerate will have a 1-1 mapping to the names in SourceFileDescriptors.
 	//
