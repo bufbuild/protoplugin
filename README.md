@@ -106,7 +106,7 @@ func handle(
 }
 ```
 
-**For 99% of plugin authors, this is all you need to do - loop over the `GeneratedFileDescriptors` add files with `AddFile`, and if you have errors, add errors with `AddError`. That's it.**
+**For 99% of plugin authors, this is all you need to do** - loop over the `GeneratedFileDescriptors`, add files with `AddFile`, and if you have errors, add errors with `AddError`. That's it.
 
 A `Handler` takes a [`Request`](https://pkg.go.dev/github.com/bufbuild/protoplugin#Request), and expects a response
 to be written to the [`ResponseWriter`](https://pkg.go.dev/github.com/bufbuild/protoplugin#ResponseWriter).
