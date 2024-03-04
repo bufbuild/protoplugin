@@ -85,18 +85,19 @@ func handle(
 	// plugin has not indicated it will support it.
 	responseWriter.AddFeatureProto3Optional()
 
-	fileDescriptorProtos, err := request.GenerateFileDescriptorProtos()
+	fileDescriptors, err := request.GenerateFileDescriptors()
 	if err != nil {
 		return err
 	}
-	for _, fileDescriptorProto := range fileDescriptorProtos {
-		topLevelMessageNames := make([]string, len(fileDescriptorProto.GetMessageType()))
-		for i, descriptorProto := range fileDescriptorProto.GetMessageType() {
-			topLevelMessageNames[i] = descriptorProto.GetName()
+	for _, fileDescriptor := range fileDescriptors {
+		messages := fileDescriptor.Messages()
+		topLevelMessageNames := make([]string, messages.Len())
+		for i := 0; i < messages.Len(); i++ {
+			topLevelMessageNames[i] = string(messages.Get(i).Name())
 		}
 		// Add the response file to the response.
 		responseWriter.AddFile(
-			fileDescriptorProto.GetName()+".txt",
+			fileDescriptor.Path()+".txt",
 			strings.Join(topLevelMessageNames, "\n")+"\n",
 		)
 	}
@@ -104,6 +105,8 @@ func handle(
 	return nil
 }
 ```
+
+**For 99% of plugin authors, this is all you need to do - loop over the `GeneratedFileDescriptors` add files with `AddFile`, and if you have errors, add errors with `AddError`. That's it.**
 
 A `Handler` takes a [`Request`](https://pkg.go.dev/github.com/bufbuild/protoplugin#Request), and expects a response
 to be written to the [`ResponseWriter`](https://pkg.go.dev/github.com/bufbuild/protoplugin#ResponseWriter).
