@@ -45,13 +45,15 @@ func validateCodeGeneratorRequest(request *pluginpb.CodeGeneratorRequest) error 
 	); err != nil {
 		return err
 	}
-	if err := validateCodeGeneratorRequestFileDescriptorProtos(
-		"source_file_descriptors",
-		request.GetSourceFileDescriptors(),
-		request.GetFileToGenerate(),
-		true,
-	); err != nil {
-		return err
+	if len(request.GetSourceFileDescriptors()) > 0 {
+		if err := validateCodeGeneratorRequestFileDescriptorProtos(
+			"source_file_descriptors",
+			request.GetSourceFileDescriptors(),
+			request.GetFileToGenerate(),
+			true,
+		); err != nil {
+			return err
+		}
 	}
 	if version := request.GetCompilerVersion(); version != nil {
 		if major := version.GetMajor(); major < 0 {

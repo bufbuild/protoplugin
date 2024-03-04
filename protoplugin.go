@@ -53,6 +53,9 @@ func Run(
 ) error {
 	// We don't use args yet, but reserving it for future use in case we want to implement automatic handling of a version flag.
 	_ = args
+	if stderr == nil {
+		stderr = io.Discard
+	}
 
 	runOptions := newRunOptions()
 	for _, option := range options {

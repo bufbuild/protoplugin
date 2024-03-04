@@ -198,7 +198,7 @@ func (r *ResponseWriter) toCodeGeneratorResponse() (*pluginpb.CodeGeneratorRespo
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	if r.responseSupportedFeatures&uint64(pluginpb.CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS) == 0 {
+	if r.responseSupportedFeatures&uint64(pluginpb.CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS) != 0 {
 		if r.responseMinimumEdition == 0 {
 			r.addSystemError(
 				errors.New("CodeGeneratorResponse: FEATURE_SUPPORTS_EDITIONS specified but no minimum_edition set"),
