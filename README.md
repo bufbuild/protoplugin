@@ -210,7 +210,7 @@ it gives you the basics, so you don't have to write them again and again.
 
 ## Status: Alpha
 
-This module is still being developed and may change. Proper documentation will come soon.
+This module is still being developed and may change.
 
 ## Legal
 
