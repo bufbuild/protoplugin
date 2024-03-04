@@ -14,8 +14,8 @@ that had sensibile validations applied to it, and that you produce a valid
 [CodeGeneratorResponse](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/compiler/plugin.proto).
 It's really easy to produce a `CodeGeneratorResponse` that `protoc` or [buf](https://github.com/bufbuild/buf) will happily consume, but is actually invalid and will result in unexpected generated code.
 
-`Protoplugin` takes care of all of this for you, and nothing more. `Protoplugin` makes authoring `protoc` plugins
-in Golang dead-simple. `Protoplugin` will:
+`protoplugin` takes care of all of this for you, and nothing more. `protoplugin` makes authoring `protoc` plugins
+in Golang super-simple. `protoplugin` will:
 
 - Deal with all of the boilerplate of consuming `CodeGeneratorRequests` and `CodeGeneratorResponses` for you,
   providing you with a simple [Handler](https://pkg.go.dev/github.com/bufbuild/protoplugin#Handler) interface
@@ -27,10 +27,10 @@ The validation performed takes into account years of experience we've had here a
 handle edge cases you've never thought about - the same code backs the execution of plugins within the
 `buf` compiler, and has dealt with handling plugins that misbehave in ways we never would have expected.
 
-`Protoplugin` is also ready for [Protobuf Editions](https://protobuf.dev/editions) from day one, helping you
+`protoplugin` is also ready for [Protobuf Editions](https://protobuf.dev/editions) from day one, helping you
 navigate this new Protobuf functionality with ease.
 
-`Protoplugin` has a single non-test dependency, on
+`protoplugin` has a single non-test dependency, on
 `google.golang.org/protobuf` - all other dependencies in [`go.mod`](go.mod) are for `protoplugin`'s own
 tests, and will not result in additional dependencies in your code.
 
@@ -41,7 +41,7 @@ you don't want.
 If you are authoring `protoc` plugins that produce `.go` files, you
 should use [protogen](https://pkg.go.dev/google.golang.org/protobuf/compiler/protogen), as it has
 Golang-specific helpers, such as dealing with Golang import paths, and handling the standard Golang
-`protoc` plugin flags like (`paths=source_relative`). However, `protogen` is very Golang-specific -
+`protoc` plugin flags like `paths=source_relative`. However, `protogen` is very Golang-specific -
 the interface exposed doesn't really make sense outside of generating `.go` files, and you specifically
 do not want most plugins to expose the standard Golang `protoc` plugin flags. If you'd like to use `protogen`
 but also take advantage of `protoplugin`'s hardening, it's very easy to wrap `protogen` with
