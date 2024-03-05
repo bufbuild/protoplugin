@@ -83,7 +83,7 @@ func handle(
 	// Set the flag indicating that we support proto3 optionals. We don't even use them in this
 	// plugin, but protoc will error if it encounters a proto3 file with an optional but the
 	// plugin has not indicated it will support it.
-	responseWriter.AddFeatureProto3Optional()
+	responseWriter.SetFeatureProto3Optional()
 
 	fileDescriptors, err := request.FileDescriptorsToGenerate()
 	if err != nil {
@@ -106,7 +106,7 @@ func handle(
 }
 ```
 
-**For 99% of plugin authors, this is all you need to do** - loop over the `GeneratedFileDescriptors`, add files with `AddFile`, and if you have errors, add errors with `AddError`. That's it.
+**For 99% of plugin authors, this is all you need to do** - loop over the `GeneratedFileDescriptors`, add files with `AddFile`, and if you have errors, add errors with `SetError`. That's it.
 
 A `Handler` takes a [`Request`](https://pkg.go.dev/github.com/bufbuild/protoplugin#Request), and expects a response
 to be written to the [`ResponseWriter`](https://pkg.go.dev/github.com/bufbuild/protoplugin#ResponseWriter).
@@ -161,17 +161,17 @@ the latter with validation the version is valid. Additionally, if you need low-l
 
 A `ResponseWriter` builds `CodeGeneratorResponses` for you. The most common methods you will use:
 
-- `AddFiles`: Add a new file with content.
-- `AddError`: Add to the error message that will be propagated to the compiler.
-- `AddFeatureProto3Optional`: Denote that your plugin handles `optional` in `proto3` (all new plugins should set this).
-- `AddFeatureSupportsEditions`: Denote that you support editions (most plugins will not yet).
+- `AddFile`: Add a new file with content.
+- `SetError`: Add to the error message that will be propagated to the compiler.
+- `SetFeatureProto3Optional`: Denote that your plugin handles `optional` in `proto3` (all new plugins should set this).
+- `SetFeatureSupportsEditions`: Denote that you support editions (most plugins will not yet).
 
 A `ResponseWriter` also provide low-level access for advanced plugins that need to build the `CodeGeneratorResponse`
 more directly:
 
 - `AddCodeGeneratorResponseFiles`: Add `CodeGeneratorResponse.File`s directly. May be needed when using i.e.
   insertion points.
-- `AddSupportedFeatures`: Set supported features directly.
+- `SetSupportedFeatures`: Set supported features directly.
 - `SetMinimumEdition/SetMaximumEdition`: directly set the minimum and maximum Edition supported.
 
 For most authors, however, you should use the common methods.

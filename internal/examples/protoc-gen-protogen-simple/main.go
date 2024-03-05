@@ -46,8 +46,8 @@ func handle(
 	}
 	response := plugin.Response()
 	responseWriter.AddCodeGeneratorResponseFiles(response.GetFile()...)
-	responseWriter.AddError(response.GetError())
-	responseWriter.AddFeatureProto3Optional()
+	responseWriter.SetError(response.GetError())
+	responseWriter.SetFeatureProto3Optional()
 	return nil
 }
 

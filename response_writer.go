@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -37,7 +36,7 @@ type ResponseWriter struct {
 
 	responseFileNames         map[string]struct{}
 	responseFiles             []*pluginpb.CodeGeneratorResponse_File
-	responseErrorMessages     []string
+	responseErrorMessage      string
 	responseSupportedFeatures uint64
 	responseMinimumEdition    uint32
 	responseMaximumEdition    uint32
@@ -46,7 +45,10 @@ type ResponseWriter struct {
 	lock         sync.RWMutex
 }
 
-// AddFileWithContent adds the file with the given content to the response.
+// AddFile adds the file with the given content to the response.
+//
+// This takes care of the most common case of adding a CodeGeneratorResponse.File with content. If you need add a
+// CodeGeneratorResponse.File with insertion points or any other feature, use AddCodeGeneratorResponseFiles.
 //
 // The plugin will exit with a non-zero exit code if the name is an invalid path.
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, and do not jump context.
@@ -61,13 +63,15 @@ func (r *ResponseWriter) AddFile(name string, content string) {
 	)
 }
 
-// AddError adds the error message to the response.
+// SetError sets the error message on the response.
 //
-// If there is an existing error message already added, the new error message will be concatenated with the
-// existing error message with a newline.
+// If there is an error with the actual input .proto files that results in your plugin's business logic not being able to be executed
+// (for example, a missing option), this error should be added to the response via SetError. If there is a system error, the
+// Handler should return error, which will result in the plugin exiting with a non-zero exit code.
 //
-// Note that empty error message will be ignored.
-func (r *ResponseWriter) AddError(message string) {
+// If there is an existing error message already added, it will be overwritten.
+// Note that empty error messages will be ignored (ie it will be as if no error was set).
+func (r *ResponseWriter) SetError(message string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -77,28 +81,28 @@ func (r *ResponseWriter) AddError(message string) {
 	if message == "" {
 		return
 	}
-	r.responseErrorMessages = append(r.responseErrorMessages, message)
+	r.responseErrorMessage = message
 }
 
-// AddFeatureProto3Optional sets the FEATURE_PROTO3_OPTIONAL feature on the response.
+// SetFeatureProto3Optional sets the FEATURE_PROTO3_OPTIONAL feature on the response.
 //
-// This function should be preferred over AddSupportedFeatures. Use AddSupportedFeatures only if you need low-level access.
-func (r *ResponseWriter) AddFeatureProto3Optional() {
-	r.AddSupportedFeatures(uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL))
+// This function should be preferred over SetSupportedFeatures. Use SetSupportedFeatures only if you need low-level access.
+func (r *ResponseWriter) SetFeatureProto3Optional() {
+	r.addSupportedFeatures(uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL))
 }
 
-// AddFeatureSupportsEditions sets the FEATURE_SUPPORTS_EDITIONS feature on the response along
+// SetFeatureSupportsEditions sets the FEATURE_SUPPORTS_EDITIONS feature on the response along
 // with the given min and max editions.
 //
-// This function should be preferred over calling AddSupportedFeatures, SetMinimumEdition, and SetMaximumEdition separately.
-// Use AddSupportedFeatures, SetMinimumEdition, and SetMaximumEdition only if you need low-level access.
+// This function should be preferred over calling SetSupportedFeatures, SetMinimumEdition, and SetMaximumEdition separately.
+// Use SetSupportedFeatures, SetMinimumEdition, and SetMaximumEdition only if you need low-level access.
 //
 // The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
-func (r *ResponseWriter) AddFeatureSupportsEditions(
+func (r *ResponseWriter) SetFeatureSupportsEditions(
 	minimumEdition descriptorpb.Edition,
 	maximumEdition descriptorpb.Edition,
 ) {
-	r.AddSupportedFeatures(uint64(pluginpb.CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS))
+	r.addSupportedFeatures(uint64(pluginpb.CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS))
 	r.SetMinimumEdition(uint32(minimumEdition))
 	r.SetMaximumEdition(uint32(maximumEdition))
 }
@@ -148,17 +152,16 @@ func (r *ResponseWriter) AddCodeGeneratorResponseFiles(files ...*pluginpb.CodeGe
 	}
 }
 
-// AddSupportedFeatures adds the given features to the response.
+// SetSupportedFeaturessets the given features on the response.
 //
 // You likely want to use the specific feature functions instead of this function.
 // This function is for lower-level access.
 //
-// If there are existing features already added, the new featurs will be OR'ed
-// into the existing features.
+// If there are existing features already added, they will be overwritten.
 //
 // If the features are not represented in the known CodeGeneratorResponse.Features,
 // the plugin will exit with a non-zero exit code.
-func (r *ResponseWriter) AddSupportedFeatures(supportedFeatures uint64) {
+func (r *ResponseWriter) SetSupportedFeatures(supportedFeatures uint64) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -166,13 +169,13 @@ func (r *ResponseWriter) AddSupportedFeatures(supportedFeatures uint64) {
 		r.addSystemError(fmt.Errorf("specified supported features contains unknown CodeGeneratorResponse.Features: %s", strconv.FormatUint(supportedFeatures, 2)))
 		return
 	}
-	r.responseSupportedFeatures |= supportedFeatures
+	r.responseSupportedFeatures = supportedFeatures
 }
 
 // SetMinimumEdition sets the minimum edition.
 //
 // If you want to specify that you are supporting editions, it is likely easier to use
-// AddFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
+// SetFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
 //
 // The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
 func (r *ResponseWriter) SetMinimumEdition(minimumEdition uint32) {
@@ -182,7 +185,7 @@ func (r *ResponseWriter) SetMinimumEdition(minimumEdition uint32) {
 // SetMaximumEdition sets the maximum edition.
 //
 // If you want to specify that you are supporting editions, it is likely easier to use
-// AddFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
+// SetFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
 //
 // The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
 func (r *ResponseWriter) SetMaximumEdition(maximumEdition uint32) {
@@ -196,6 +199,17 @@ func newResponseWriter(warningHandlerFunc func(error)) *ResponseWriter {
 		warningHandlerFunc: warningHandlerFunc,
 		responseFileNames:  make(map[string]struct{}),
 	}
+}
+
+func (r *ResponseWriter) addSupportedFeatures(supportedFeatures uint64) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	if supportedFeatures|allSupportedFeaturesMask != allSupportedFeaturesMask {
+		r.addSystemError(fmt.Errorf("specified supported features contains unknown CodeGeneratorResponse.Features: %s", strconv.FormatUint(supportedFeatures, 2)))
+		return
+	}
+	r.responseSupportedFeatures |= supportedFeatures
 }
 
 func (r *ResponseWriter) toCodeGeneratorResponse() (*pluginpb.CodeGeneratorResponse, error) {
@@ -230,9 +244,8 @@ func (r *ResponseWriter) toCodeGeneratorResponse() (*pluginpb.CodeGeneratorRespo
 	response := &pluginpb.CodeGeneratorResponse{
 		File: r.responseFiles,
 	}
-	if len(r.responseErrorMessages) > 0 {
-		// We know that the error message are non-empty from AddErrorMessage.
-		response.Error = proto.String(strings.Join(r.responseErrorMessages, "\n"))
+	if r.responseErrorMessage != "" {
+		response.Error = proto.String(r.responseErrorMessage)
 	}
 	if r.responseSupportedFeatures != 0 {
 		response.SupportedFeatures = proto.Uint64(r.responseSupportedFeatures)

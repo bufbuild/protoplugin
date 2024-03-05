@@ -30,9 +30,10 @@ import (
 
 var interruptSignals = append([]os.Signal{os.Interrupt}, extraInterruptSignals...)
 
-// Main can be called by main functions to run a Handler.
+// Main simplifies the authoring of main functions to invoke Handler.
 //
-// If an error is returned by the handler, Main will exit with exit code 1.
+// Main will handle interrupt signals, and exit with a non-zero exit code if the Handler
+// returns an error.
 //
 //	func main() {
 //	  protoplugin.Main(newHandler())
@@ -42,10 +43,8 @@ func Main(handler Handler, options ...MainOption) {
 	for _, option := range options {
 		option.applyMainOption(runOptions)
 	}
-	runOptions.stderr = os.Stderr
-
 	ctx, cancel := withCancelInterruptSignal(context.Background())
-	if err := run(ctx, os.Stdin, os.Stdout, handler, runOptions); err != nil {
+	if err := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, handler, runOptions); err != nil {
 		exitError := &exec.ExitError{}
 		if errors.As(err, &exitError) {
 			cancel()
@@ -62,17 +61,21 @@ func Main(handler Handler, options ...MainOption) {
 }
 
 // Run runs the plugin using the Handler for the given stdio.
-func Run(ctx context.Context, stdin io.Reader, stdout io.Writer, handler Handler, options ...RunOption) error {
+//
+// This is the function that Main calls to invoke Handlers. However, Run gives you control over
+// stdio, and does not provide additional functionality such as handling interrupts. Run is useful
+// when writing plugin tests, or if you want to use your own custom logic for main functions.
+func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, handler Handler, options ...RunOption) error {
 	runOptions := newRunOptions()
 	for _, option := range options {
 		option.applyRunOption(runOptions)
 	}
-	return run(ctx, stdin, stdout, handler, runOptions)
+	return run(ctx, args, stdin, stdout, stderr, handler, runOptions)
 }
 
 // MainOption is an option for Main.
 //
-// MainOptions are also RunOptions, that is all options that can be passed to Main can also be passed to Run.
+// Note that MainOptions are also RunOptions, so all MainOptions can also be passed to Run.
 type MainOption interface {
 	RunOption
 
@@ -80,7 +83,7 @@ type MainOption interface {
 }
 
 // WithWarningHandler returns a new MainOption that says to handle warnings with the given function.
-// This can be passed to either Main or to Run, as RunOptions are also MainOptions.
+// This can be passed to either Main or to Run, as MainOptions are also RunOptions.
 //
 // The default is to write warnings to stderr.
 //
@@ -91,31 +94,26 @@ func WithWarningHandler(warningHandlerFunc func(error)) MainOption {
 }
 
 // RunOption is an option for Run.
+//
+// Note that MainOptions are also RunOptions, so all MainOptions can also be passed to Run.
 type RunOption interface {
 	applyRunOption(runOptions *runOptions)
-}
-
-// WithStderr returns a new RunOption that says to use the given stderr.
-//
-// The default is to discard stderr. Note that this means that if using Run instead of Main, all warnings
-// will be dropped by default unless this WithStderr or WithWarningHandler is set.
-func WithStderr(stderr io.Writer) RunOption {
-	return &stderrOption{stderr: stderr}
 }
 
 /// *** PRIVATE ***
 
 func run(
 	ctx context.Context,
+	args []string,
 	stdin io.Reader,
 	stdout io.Writer,
+	stderr io.Writer,
 	handler Handler,
 	runOptions *runOptions,
 ) error {
-	stderr := runOptions.stderr
-	if stderr == nil {
-		stderr = io.Discard
-	}
+	// Reserving args so we can use it for flags.
+	_ = args
+
 	warningHandlerFunc := runOptions.warningHandlerFunc
 	if warningHandlerFunc == nil {
 		warningHandlerFunc = func(err error) { _, _ = fmt.Fprintln(stderr, err.Error()) }
@@ -174,24 +172,11 @@ func newInterruptSignalChannel() (<-chan os.Signal, func()) {
 }
 
 type runOptions struct {
-	stderr             io.Writer
 	warningHandlerFunc func(error)
 }
 
 func newRunOptions() *runOptions {
 	return &runOptions{}
-}
-
-type stderrOption struct {
-	stderr io.Writer
-}
-
-func (w *stderrOption) applyMainOption(runOptions *runOptions) {
-	runOptions.stderr = w.stderr
-}
-
-func (w *stderrOption) applyRunOption(runOptions *runOptions) {
-	runOptions.stderr = w.stderr
 }
 
 type warningHandlerOption struct {

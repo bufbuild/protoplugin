@@ -92,8 +92,10 @@ func testBasic(
 
 	err = Run(
 		ctx,
+		nil,
 		stdin,
 		stdout,
+		io.Discard,
 		handler,
 	)
 	require.NoError(t, err)

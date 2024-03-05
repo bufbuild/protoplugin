@@ -41,7 +41,7 @@ type Handler interface {
 	// If an error is returned, it will not be returned as an error on the CodeGeneratorRequest, instead it will be
 	// treated as an error of the plugin itself, and the plugin will return a non-zero exit code. If there is an error
 	// with the actual input .proto files that results in your plugin's business logic not being able to be executed
-	// (for example, a missing option), this error should be added to the response via AddError.
+	// (for example, a missing option), this error should be added to the response via SetError.
 	Handle(
 		ctx context.Context,
 		responseWriter *ResponseWriter,

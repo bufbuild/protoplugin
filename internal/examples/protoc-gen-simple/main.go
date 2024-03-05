@@ -38,7 +38,7 @@ func handle(
 	// Set the flag indicating that we support proto3 optionals. We don't even use them in this
 	// plugin, but protoc will error if it encounters a proto3 file with an optional but the
 	// plugin has not indicated it will support it.
-	responseWriter.AddFeatureProto3Optional()
+	responseWriter.SetFeatureProto3Optional()
 
 	for _, fileDescriptorProto := range request.FileDescriptorProtosToGenerate() {
 		topLevelMessageNames := make([]string, len(fileDescriptorProto.GetMessageType()))
