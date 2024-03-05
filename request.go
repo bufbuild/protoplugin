@@ -55,7 +55,7 @@ func (r *Request) Parameter() string {
 	return r.codeGeneratorRequest.GetParameter()
 }
 
-// GenerateFileDescriptors returns the FileDescriptors for the files specified by the
+// ToGenerateFileDescriptors returns the FileDescriptors for the files specified by the
 // file_to_generate field on the CodeGeneratorRequest.
 //
 // If WithSourceRetentionOptions is specified and the source_file_descriptors field was
@@ -65,7 +65,7 @@ func (r *Request) Parameter() string {
 //
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) GenerateFileDescriptors(options ...GenerateFileDescriptorsOption) ([]protoreflect.FileDescriptor, error) {
+func (r *Request) ToGenerateFileDescriptors(options ...GenerateFileDescriptorsOption) ([]protoreflect.FileDescriptor, error) {
 	requestFileOptions := newRequestFileOptions()
 	for _, option := range options {
 		option.applyGenerateFileDescriptorsOption(requestFileOptions)
@@ -106,7 +106,7 @@ func (r *Request) AllFiles(options ...AllFilesOption) (*protoregistry.Files, err
 	return r.allFiles(requestFileOptions.sourceRetentionOptions)
 }
 
-// GenerateFileDescriptorProtos returns the FileDescriptors for the files specified by the
+// ToGenerateFileDescriptorProtos returns the FileDescriptors for the files specified by the
 // file_to_generate field.
 //
 // If WithSourceRetentionOptions is specified and the source_file_descriptors field was
@@ -116,7 +116,7 @@ func (r *Request) AllFiles(options ...AllFilesOption) (*protoregistry.Files, err
 //
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) GenerateFileDescriptorProtos(options ...GenerateFileDescriptorProtosOption) ([]*descriptorpb.FileDescriptorProto, error) {
+func (r *Request) ToGenerateFileDescriptorProtos(options ...GenerateFileDescriptorProtosOption) ([]*descriptorpb.FileDescriptorProto, error) {
 	requestFileOptions := newRequestFileOptions()
 	for _, option := range options {
 		option.applyGenerateFileDescriptorProtosOption(requestFileOptions)

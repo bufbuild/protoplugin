@@ -40,7 +40,7 @@ func handle(
 	// plugin has not indicated it will support it.
 	responseWriter.AddFeatureProto3Optional()
 
-	fileDescriptorProtos, err := request.GenerateFileDescriptorProtos()
+	fileDescriptorProtos, err := request.ToGenerateFileDescriptorProtos()
 	if err != nil {
 		return err
 	}

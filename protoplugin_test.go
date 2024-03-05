@@ -49,7 +49,7 @@ func TestBasic(t *testing.T) {
 				responseWriter *ResponseWriter,
 				request *Request,
 			) error {
-				fileDescriptorProtos, err := request.GenerateFileDescriptorProtos()
+				fileDescriptorProtos, err := request.ToGenerateFileDescriptorProtos()
 				if err != nil {
 					return err
 				}
