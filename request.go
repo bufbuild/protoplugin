@@ -121,7 +121,7 @@ func (r *Request) ToGenerateFileDescriptorProtos(options ...RequestFileOption) (
 	for _, option := range options {
 		option.applyRequestFileOption(requestFileOptions)
 	}
-	return r.generateFileDescriptorProtos(requestFileOptions.sourceRetentionOptions)
+	return r.toGenerateFileDescriptorProtos(requestFileOptions.sourceRetentionOptions)
 }
 
 // AllFileDescriptorProtos returns the FileDescriptorProtos for all files in the CodeGeneratorRequest.
@@ -197,7 +197,7 @@ func (r *Request) allFiles(sourceRetentionOptions bool) (*protoregistry.Files, e
 	return protodesc.NewFiles(&descriptorpb.FileDescriptorSet{File: fileDescriptorProtos})
 }
 
-func (r *Request) generateFileDescriptorProtos(sourceRetentionOptions bool) ([]*descriptorpb.FileDescriptorProto, error) {
+func (r *Request) toGenerateFileDescriptorProtos(sourceRetentionOptions bool) ([]*descriptorpb.FileDescriptorProto, error) {
 	// If we want source-retention options, source_file_descriptors is all we need.
 	if sourceRetentionOptions {
 		if err := r.validateSourceFileDescriptorsPresent(); err != nil {
