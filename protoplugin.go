@@ -93,3 +93,36 @@ func Run(
 	_, err = stdout.Write(data)
 	return err
 }
+
+// RunOption is an option for Main or Run.
+type RunOption interface {
+	applyRunOption(runOptions *runOptions)
+}
+
+// WithWarningHandler returns a new Option that says to handle warnings with the given function.
+//
+// The default is to write warnings to stderr.
+//
+// Implementers of warningHandlerFunc can assume that errors passed will be non-nil and have non-empty
+// values for err.Error().
+func WithWarningHandler(warningHandlerFunc func(error)) RunOption {
+	return &warningHandlerOption{warningHandlerFunc: warningHandlerFunc}
+}
+
+/// *** PRIVATE ***
+
+type runOptions struct {
+	warningHandlerFunc func(error)
+}
+
+func newRunOptions() *runOptions {
+	return &runOptions{}
+}
+
+type warningHandlerOption struct {
+	warningHandlerFunc func(error)
+}
+
+func (w *warningHandlerOption) applyRunOption(runOptions *runOptions) {
+	runOptions.warningHandlerFunc = w.warningHandlerFunc
+}

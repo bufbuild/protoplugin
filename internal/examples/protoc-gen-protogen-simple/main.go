@@ -37,11 +37,7 @@ func handle(
 	responseWriter *protoplugin.ResponseWriter,
 	request *protoplugin.Request,
 ) error {
-	codeGeneratorRequest, err := request.CodeGeneratorRequest()
-	if err != nil {
-		return err
-	}
-	plugin, err := protogen.Options{}.New(codeGeneratorRequest)
+	plugin, err := protogen.Options{}.New(request.CodeGeneratorRequest())
 	if err != nil {
 		return err
 	}

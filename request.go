@@ -16,11 +16,9 @@ package protoplugin
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"sync"
 
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -48,6 +46,8 @@ type Request struct {
 
 	getFilesToGenerateMap                               func() map[string]struct{}
 	getSourceFileDescriptorNameToFileDescriptorProtoMap func() map[string]*descriptorpb.FileDescriptorProto
+
+	sourceRetentionOptions bool
 }
 
 // Parameter returns the value of the parameter field on the CodeGeneratorRequest.
@@ -58,19 +58,11 @@ func (r *Request) Parameter() string {
 // GenerateFileDescriptors returns the FileDescriptors for the files specified by the
 // file_to_generate field on the CodeGeneratorRequest.
 //
-// If WithSourceRetentionOptions is specified and the source_file_descriptors field was
-// not present on the CodeGeneratorRequest, an error is returned.
-//
 // The caller can assume that all FileDescriptors have a valid path as the name field.
-//
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) GenerateFileDescriptors(options ...GenerateFileDescriptorsOption) ([]protoreflect.FileDescriptor, error) {
-	requestFileOptions := newRequestFileOptions()
-	for _, option := range options {
-		option.applyGenerateFileDescriptorsOption(requestFileOptions)
-	}
-	files, err := r.allFiles(requestFileOptions.sourceRetentionOptions)
+func (r *Request) GenerateFileDescriptors() ([]protoreflect.FileDescriptor, error) {
+	files, err := r.AllFiles()
 	if err != nil {
 		return nil, err
 	}
@@ -91,37 +83,35 @@ func (r *Request) GenerateFileDescriptors(options ...GenerateFileDescriptorsOpti
 // from the source_file_descriptors field used for the files in file_to_geneate if WithSourceRetentionOptions
 // is specified.
 //
-// If WithSourceRetentionOptions is specified and the source_file_descriptors field was
-// not present on the CodeGeneratorRequest, an error is returned.
-//
 // The caller can assume that all FileDescriptors have a valid path as the name field.
-//
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) AllFiles(options ...AllFilesOption) (*protoregistry.Files, error) {
-	requestFileOptions := newRequestFileOptions()
-	for _, option := range options {
-		option.applyAllFilesOption(requestFileOptions)
-	}
-	return r.allFiles(requestFileOptions.sourceRetentionOptions)
+func (r *Request) AllFiles() (*protoregistry.Files, error) {
+	return protodesc.NewFiles(&descriptorpb.FileDescriptorSet{File: r.AllFileDescriptorProtos()})
 }
 
 // GenerateFileDescriptorProtos returns the FileDescriptors for the files specified by the
 // file_to_generate field.
 //
-// If WithSourceRetentionOptions is specified and the source_file_descriptors field was
-// not present on the CodeGeneratorRequest, an error is returned.
-//
 // The caller can assume that all FileDescriptorProtoss have a valid path as the name field.
-//
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) GenerateFileDescriptorProtos(options ...GenerateFileDescriptorProtosOption) ([]*descriptorpb.FileDescriptorProto, error) {
-	requestFileOptions := newRequestFileOptions()
-	for _, option := range options {
-		option.applyGenerateFileDescriptorProtosOption(requestFileOptions)
+func (r *Request) GenerateFileDescriptorProtos() []*descriptorpb.FileDescriptorProto {
+	// If we want source-retention options, source_file_descriptors is all we need.
+	//
+	// We have validated that source_file_descriptors is populated via WithSourceRetentionOptions.
+	if r.sourceRetentionOptions {
+		return slices.Clone(r.codeGeneratorRequest.GetSourceFileDescriptors())
 	}
-	return r.generateFileDescriptorProtos(requestFileOptions.sourceRetentionOptions)
+	// Otherwise, we need to get the values in proto_file that are in file_to_generate.
+	filesToGenerateMap := r.getFilesToGenerateMap()
+	fileDescriptorProtos := make([]*descriptorpb.FileDescriptorProto, 0, len(r.codeGeneratorRequest.GetFileToGenerate()))
+	for _, protoFile := range r.codeGeneratorRequest.GetProtoFile() {
+		if _, ok := filesToGenerateMap[protoFile.GetName()]; ok {
+			fileDescriptorProtos = append(fileDescriptorProtos, protoFile)
+		}
+	}
+	return fileDescriptorProtos
 }
 
 // AllFileDescriptorProtos returns the FileDescriptorProtos for all files in the CodeGeneratorRequest.
@@ -130,19 +120,29 @@ func (r *Request) GenerateFileDescriptorProtos(options ...GenerateFileDescriptor
 // from the source_file_descriptors field used for the files in file_to_geneate if WithSourceRetentionOptions
 // is specified.
 //
-// If WithSourceRetentionOptions is specified and the source_file_descriptors field was
-// not present on the CodeGeneratorRequest, an error is returned.
-//
 // The caller can assume that all FileDescriptorProtoss have a valid path as the name field.
-//
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) AllFileDescriptorProtos(options ...AllFileDescriptorProtosOption) ([]*descriptorpb.FileDescriptorProto, error) {
-	requestFileOptions := newRequestFileOptions()
-	for _, option := range options {
-		option.applyAllFileDescriptorProtosOption(requestFileOptions)
+func (r *Request) AllFileDescriptorProtos() []*descriptorpb.FileDescriptorProto {
+	// If we do not want source-retention options, proto_file is all we need.
+	if !r.sourceRetentionOptions {
+		return slices.Clone(r.codeGeneratorRequest.GetProtoFile())
 	}
-	return r.allFileDescriptorProtos(requestFileOptions.sourceRetentionOptions)
+	// Otherwise, we need to replace the values in proto_file that are in file_to_generate
+	// with the values from source_file_descriptors.
+	//
+	// We have validated that source_file_descriptors is populated via WithSourceRetentionOptions.
+	filesToGenerateMap := r.getFilesToGenerateMap()
+	sourceFileDescriptorNameToFileDescriptorProtoMap := r.getSourceFileDescriptorNameToFileDescriptorProtoMap()
+	fileDescriptorProtos := make([]*descriptorpb.FileDescriptorProto, len(r.codeGeneratorRequest.GetProtoFile()))
+	for i, protoFile := range r.codeGeneratorRequest.GetProtoFile() {
+		if _, ok := filesToGenerateMap[protoFile.GetName()]; ok {
+			// We assume we've done validation that source_file_descriptors contains file_to_generate.
+			protoFile = sourceFileDescriptorNameToFileDescriptorProtoMap[protoFile.GetName()]
+		}
+		fileDescriptorProtos[i] = protoFile
+	}
+	return fileDescriptorProtos
 }
 
 // CompilerVersion returns the specified compiler_version on the CodeGeneratorRequest.
@@ -164,13 +164,29 @@ func (r *Request) CompilerVersion() *CompilerVersion {
 
 // CodeGeneratorRequest returns the raw underlying CodeGeneratorRequest.
 //
-// The returned CodeGeneratorRequest is a copy - you can freely modiify it.
-func (r *Request) CodeGeneratorRequest() (*pluginpb.CodeGeneratorRequest, error) {
-	clone, ok := proto.Clone(r.codeGeneratorRequest).(*pluginpb.CodeGeneratorRequest)
-	if !ok {
-		return nil, fmt.Errorf("proto.Clone on %T returned a %T", r.codeGeneratorRequest, clone)
+// The returned CodeGeneratorRequest is a not copy - do not modify it! If you would
+// like to modify the CodeGeneratorRequest, use proto.Clone to create a copy.
+func (r *Request) CodeGeneratorRequest() *pluginpb.CodeGeneratorRequest {
+	return r.codeGeneratorRequest
+}
+
+// WithSourceRetentionOptions will return a copy of the Request that will result in all
+// methods returning descriptors with source-retention options retained on files to generate.
+//
+// By default, only runtime-retention options are included on files to generate. Note that
+// source-retention options are always included on files not in file_to_generate.
+//
+// An error will be returned if the underlying CodeGeneratorRequest did not have source_file_descriptors populated.
+func (r *Request) WithSourceRetentionOptions() (*Request, error) {
+	if err := r.validateSourceFileDescriptorsPresent(); err != nil {
+		return nil, err
 	}
-	return clone, nil
+	return &Request{
+		codeGeneratorRequest:                                r.codeGeneratorRequest,
+		getFilesToGenerateMap:                               r.getFilesToGenerateMap,
+		getSourceFileDescriptorNameToFileDescriptorProtoMap: r.getSourceFileDescriptorNameToFileDescriptorProtoMap,
+		sourceRetentionOptions:                              true,
+	}, nil
 }
 
 // *** PRIVATE ***
@@ -187,56 +203,6 @@ func newRequest(codeGeneratorRequest *pluginpb.CodeGeneratorRequest) (*Request, 
 	request.getSourceFileDescriptorNameToFileDescriptorProtoMap =
 		sync.OnceValue(request.getSourceFileDescriptorNameToFileDescriptorProtoMapUncached)
 	return request, nil
-}
-
-func (r *Request) allFiles(sourceRetentionOptions bool) (*protoregistry.Files, error) {
-	fileDescriptorProtos, err := r.allFileDescriptorProtos(sourceRetentionOptions)
-	if err != nil {
-		return nil, err
-	}
-	return protodesc.NewFiles(&descriptorpb.FileDescriptorSet{File: fileDescriptorProtos})
-}
-
-func (r *Request) generateFileDescriptorProtos(sourceRetentionOptions bool) ([]*descriptorpb.FileDescriptorProto, error) {
-	// If we want source-retention options, source_file_descriptors is all we need.
-	if sourceRetentionOptions {
-		if err := r.validateSourceFileDescriptorsPresent(); err != nil {
-			return nil, err
-		}
-		return slices.Clone(r.codeGeneratorRequest.GetSourceFileDescriptors()), nil
-	}
-	// Otherwise, we need to get the values in proto_file that are in file_to_generate.
-	filesToGenerateMap := r.getFilesToGenerateMap()
-	fileDescriptorProtos := make([]*descriptorpb.FileDescriptorProto, 0, len(r.codeGeneratorRequest.GetFileToGenerate()))
-	for _, protoFile := range r.codeGeneratorRequest.GetProtoFile() {
-		if _, ok := filesToGenerateMap[protoFile.GetName()]; ok {
-			fileDescriptorProtos = append(fileDescriptorProtos, protoFile)
-		}
-	}
-	return fileDescriptorProtos, nil
-}
-
-func (r *Request) allFileDescriptorProtos(sourceRetentionOptions bool) ([]*descriptorpb.FileDescriptorProto, error) {
-	// If we do not want source-retention options, proto_file is all we need.
-	if !sourceRetentionOptions {
-		return slices.Clone(r.codeGeneratorRequest.GetProtoFile()), nil
-	}
-	if err := r.validateSourceFileDescriptorsPresent(); err != nil {
-		return nil, err
-	}
-	// Otherwise, we need to replace the values in proto_file that are in file_to_generate
-	// with the values from source_file_descriptors.
-	filesToGenerateMap := r.getFilesToGenerateMap()
-	sourceFileDescriptorNameToFileDescriptorProtoMap := r.getSourceFileDescriptorNameToFileDescriptorProtoMap()
-	fileDescriptorProtos := make([]*descriptorpb.FileDescriptorProto, len(r.codeGeneratorRequest.GetProtoFile()))
-	for i, protoFile := range r.codeGeneratorRequest.GetProtoFile() {
-		if _, ok := filesToGenerateMap[protoFile.GetName()]; ok {
-			// We assume we've done validation that source_file_descriptors contains file_to_generate.
-			protoFile = sourceFileDescriptorNameToFileDescriptorProtoMap[protoFile.GetName()]
-		}
-		fileDescriptorProtos[i] = protoFile
-	}
-	return fileDescriptorProtos, nil
 }
 
 func (r *Request) validateSourceFileDescriptorsPresent() error {

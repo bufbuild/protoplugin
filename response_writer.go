@@ -81,12 +81,17 @@ func (r *ResponseWriter) AddError(message string) {
 }
 
 // AddFeatureProto3Optional sets the FEATURE_PROTO3_OPTIONAL feature on the response.
+//
+// This function should be preferred over AddSupportedFeatures. Use AddSupportedFeatures only if you need low-level access.
 func (r *ResponseWriter) AddFeatureProto3Optional() {
 	r.AddSupportedFeatures(uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL))
 }
 
 // AddFeatureSupportsEditions sets the FEATURE_SUPPORTS_EDITIONS feature on the response along
 // with the given min and max editions.
+//
+// This function should be preferred over calling AddSupportedFeatures, SetMinimumEdition, and SetMaximumEdition separately.
+// Use AddSupportedFeatures, SetMinimumEdition, and SetMaximumEdition only if you need low-level access.
 //
 // The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
 func (r *ResponseWriter) AddFeatureSupportsEditions(
@@ -102,8 +107,7 @@ func (r *ResponseWriter) AddFeatureSupportsEditions(
 //
 // See the documentation on CodeGeneratorResponse.File for the exact semantics.
 //
-// If you are just adding file content, use the simpler AddFile.
-// This function is for lower-level access.
+// If you are just adding file content, use the simpler AddFile. This function is for lower-level access.
 //
 // The plugin will exit with a non-zero exit code if any of the following are true:
 //
