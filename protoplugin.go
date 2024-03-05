@@ -17,49 +17,104 @@ package protoplugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"os/signal"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
 )
+
+var interruptSignals = append([]os.Signal{os.Interrupt}, extraInterruptSignals...)
 
 // Main can be called by main functions to run a Handler.
 //
 // If an error is returned by the handler, Main will exit with exit code 1.
 //
 //	func main() {
-//	  protoplugin.Main(context.Background(), newHandler())
+//	  protoplugin.Main(newHandler())
 //	}
-func Main(ctx context.Context, handler Handler, options ...RunOption) {
-	if err := Run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, handler, options...); err != nil {
+func Main(handler Handler, options ...MainOption) {
+	runOptions := newRunOptions()
+	for _, option := range options {
+		option.applyMainOption(runOptions)
+	}
+	runOptions.stderr = os.Stderr
+
+	ctx, cancel := withCancelInterruptSignal(context.Background())
+	if err := run(ctx, os.Stdin, os.Stdout, handler, runOptions); err != nil {
+		exitError := &exec.ExitError{}
+		if errors.As(err, &exitError) {
+			cancel()
+			// Swallow error message - it was printed via os.Stderr redirection.
+			os.Exit(exitError.ExitCode())
+		}
 		if errString := err.Error(); errString != "" {
 			_, _ = fmt.Fprintln(os.Stderr, errString)
 		}
+		cancel()
 		os.Exit(1)
 	}
+	cancel()
 }
 
 // Run runs the plugin using the Handler for the given stdio.
-func Run(
-	ctx context.Context,
-	args []string,
-	stdin io.Reader,
-	stdout io.Writer,
-	stderr io.Writer,
-	handler Handler,
-	options ...RunOption,
-) error {
-	// We don't use args yet, but reserving it for future use in case we want to implement automatic handling of a version flag.
-	_ = args
-	if stderr == nil {
-		stderr = io.Discard
-	}
-
+func Run(ctx context.Context, stdin io.Reader, stdout io.Writer, handler Handler, options ...RunOption) error {
 	runOptions := newRunOptions()
 	for _, option := range options {
 		option.applyRunOption(runOptions)
+	}
+	return run(ctx, stdin, stdout, handler, runOptions)
+}
+
+// MainOption is an option for Main.
+//
+// MainOptions are also RunOptions, that is all options that can be passed to Main can also be passed to Run.
+type MainOption interface {
+	RunOption
+
+	applyMainOption(runOptions *runOptions)
+}
+
+// WithWarningHandler returns a new MainOption that says to handle warnings with the given function.
+// This can be passed to either Main or to Run, as RunOptions are also MainOptions.
+//
+// The default is to write warnings to stderr.
+//
+// Implementers of warningHandlerFunc can assume that errors passed will be non-nil and have non-empty
+// values for err.Error().
+func WithWarningHandler(warningHandlerFunc func(error)) MainOption {
+	return &warningHandlerOption{warningHandlerFunc: warningHandlerFunc}
+}
+
+// RunOption is an option for Run.
+type RunOption interface {
+	applyRunOption(runOptions *runOptions)
+}
+
+// WithStderr returns a new RunOption that says to use the given stderr.
+//
+// The default is to discard stderr. Note that this means that if using Run instead of Main, all warnings
+// will be dropped by default unless this WithStderr or WithWarningHandler is set.
+func WithStderr(stderr io.Writer) RunOption {
+	return &stderrOption{stderr: stderr}
+}
+
+/// *** PRIVATE ***
+
+func run(
+	ctx context.Context,
+	stdin io.Reader,
+	stdout io.Writer,
+	handler Handler,
+	runOptions *runOptions,
+) error {
+	stderr := runOptions.stderr
+	if stderr == nil {
+		stderr = io.Discard
 	}
 	warningHandlerFunc := runOptions.warningHandlerFunc
 	if warningHandlerFunc == nil {
@@ -94,24 +149,32 @@ func Run(
 	return err
 }
 
-// RunOption is an option for Main or Run.
-type RunOption interface {
-	applyRunOption(runOptions *runOptions)
+// withCancelInterruptSignal returns a context that is cancelled if interrupt signals are sent.
+func withCancelInterruptSignal(ctx context.Context) (context.Context, context.CancelFunc) {
+	interruptSignalC, closer := newInterruptSignalChannel()
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		<-interruptSignalC
+		closer()
+		cancel()
+	}()
+	return ctx, cancel
 }
 
-// WithWarningHandler returns a new Option that says to handle warnings with the given function.
+// newInterruptSignalChannel returns a new channel for interrupt signals.
 //
-// The default is to write warnings to stderr.
-//
-// Implementers of warningHandlerFunc can assume that errors passed will be non-nil and have non-empty
-// values for err.Error().
-func WithWarningHandler(warningHandlerFunc func(error)) RunOption {
-	return &warningHandlerOption{warningHandlerFunc: warningHandlerFunc}
+// Call the returned function to cancel sending to this channel.
+func newInterruptSignalChannel() (<-chan os.Signal, func()) {
+	signalC := make(chan os.Signal, 1)
+	signal.Notify(signalC, interruptSignals...)
+	return signalC, func() {
+		signal.Stop(signalC)
+		close(signalC)
+	}
 }
-
-/// *** PRIVATE ***
 
 type runOptions struct {
+	stderr             io.Writer
 	warningHandlerFunc func(error)
 }
 
@@ -119,8 +182,24 @@ func newRunOptions() *runOptions {
 	return &runOptions{}
 }
 
+type stderrOption struct {
+	stderr io.Writer
+}
+
+func (w *stderrOption) applyMainOption(runOptions *runOptions) {
+	runOptions.stderr = w.stderr
+}
+
+func (w *stderrOption) applyRunOption(runOptions *runOptions) {
+	runOptions.stderr = w.stderr
+}
+
 type warningHandlerOption struct {
 	warningHandlerFunc func(error)
+}
+
+func (w *warningHandlerOption) applyMainOption(runOptions *runOptions) {
+	runOptions.warningHandlerFunc = w.warningHandlerFunc
 }
 
 func (w *warningHandlerOption) applyRunOption(runOptions *runOptions) {

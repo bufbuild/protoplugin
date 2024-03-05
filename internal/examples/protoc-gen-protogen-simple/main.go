@@ -29,7 +29,7 @@ import (
 )
 
 func main() {
-	protoplugin.Main(context.Background(), protoplugin.HandlerFunc(handle))
+	protoplugin.Main(protoplugin.HandlerFunc(handle))
 }
 
 func handle(

@@ -28,6 +28,7 @@ linters:
     - exhaustivestruct  # replaced by exhaustruct
     - exhaustruct       # many exceptions
     - funlen            # rely on code review to limit function length
+    - gochecknoglobals  # many exceptions
     - gocognit          # dubious "cognitive overhead" quantification
     - gofumpt           # prefer standard gofmt
     - goimports         # rely on gci instead
