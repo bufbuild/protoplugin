@@ -10,14 +10,14 @@ The premise of this library is pretty simple: writing your [protoc](https://gith
 plugins is a powerful way to make Protobuf even more useful, but to do so, we all have to write the same
 boilerplate scaffolding over and over again. Additionally, you want to make sure that you have a
 [`CodeGeneratorRequest`](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/compiler/plugin.proto)
-that had sensibile validations applied to it, and that you produce a valid
+that had sensible validations applied to it, and that you produce a valid
 [CodeGeneratorResponse](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/compiler/plugin.proto).
 It's really easy to produce a `CodeGeneratorResponse` that `protoc` or [buf](https://github.com/bufbuild/buf) will happily consume, but is actually invalid and will result in unexpected generated code.
 
 `protoplugin` takes care of all of this for you, and nothing more. `protoplugin` makes authoring `protoc` plugins
-in Golang super-simple. `protoplugin` will:
+in Go super-simple. `protoplugin` will:
 
-- Deal with all of the boilerplate of consuming `CodeGeneratorRequests` and `CodeGeneratorResponses` for you,
+- Deal with all the boilerplate of consuming `CodeGeneratorRequests` and `CodeGeneratorResponses` for you,
   providing you with a simple [Handler](https://pkg.go.dev/github.com/bufbuild/protoplugin#Handler) interface
   to implement.
 - Validate that the `CodeGeneratorRequest` consumed matches basic expectations.
@@ -34,16 +34,16 @@ navigate this new Protobuf functionality with ease.
 `google.golang.org/protobuf` - all other dependencies in [`go.mod`](go.mod) are for `protoplugin`'s own
 tests, and will not result in additional dependencies in your code.
 
-If you are authoring `protoc` plugins in Golang that do anything other than produce `.go` files,
+If you are authoring `protoc` plugins in Go that do anything other than produce `.go` files,
 you should use `protoplugin`. It's the foundational library you need, and it doesn't include anything
 you don't want.
 
 If you are authoring `protoc` plugins that produce `.go` files, you
 should use [protogen](https://pkg.go.dev/google.golang.org/protobuf/compiler/protogen), as it has
-Golang-specific helpers, such as dealing with Golang import paths, and handling the standard Golang
-`protoc` plugin flags like `paths=source_relative`. However, `protogen` is very Golang-specific -
+Go-specific helpers, such as dealing with Go import paths, and handling the standard Go
+`protoc` plugin flags like `paths=source_relative`. However, `protogen` is very Go-specific -
 the interfaces exposed don't really make sense outside of generating `.go` files, and you specifically
-do not want most plugins to expose the standard Golang `protoc` plugin flags. If you'd like to use `protogen`
+do not want most plugins to expose the standard Go `protoc` plugin flags. If you'd like to use `protogen`
 but also take advantage of `protoplugin`'s hardening, it's very easy to wrap `protogen` with
 `protoplugin` - see the [protoc-gen-protogen-simple](internal/examples/protoc-gen-protogen-simple/main.go)
 example in this repository.
@@ -154,19 +154,19 @@ with source-retention options automatically. This is a new Editions feature that
 need to be concerned with yet.
 
 A `Request` also exposes the `Parameters` and `CompilerVersion` specified on the `CodeGeneratorRequest`,
-the latter with validation the the version is valid. Additionally, if you need low-level access, a
+the latter with validation the version is valid. Additionally, if you need low-level access, a
 `CodeGeneratorRequest` method is provided to expose the underlying `CodeGeneratorRequest`
 
 ### ResponseWriters
 
-A `ResponseWriter` builds `CodeGeneratorRequests` for you. The most common methods you will use:
+A `ResponseWriter` builds `CodeGeneratorResponses` for you. The most common methods you will use:
 
 - `AddFiles`: Add a new file with content.
 - `AddError`: Add to the error message that will be propagated to the compiler.
 - `AddFeatureProto3Optional`: Denote that your plugin handles `optional` in `proto3` (all new plugins should set this).
 - `AddFeatureSupportsEditions`: Denote that you support editions (most plugins will not yet).
 
-A `ResponseWriter` also provide low-level access for advanced plugins that need to build the `CodeGeneratorRequest`
+A `ResponseWriter` also provide low-level access for advanced plugins that need to build the `CodeGeneratorResponse`
 more directly:
 
 - `AddCodeGeneratorResponseFiles`: Add `CodeGeneratorResponse.File`s directly. May be needed when using i.e.
@@ -200,15 +200,15 @@ and doesn't intend to be. The only language-specific framework in wide use that 
 
 - [`protogen`](https://pkg.go.dev/google.golang.org/protobuf/compiler/protogen): As mentioned in the introduction,
   `protogen` is the standard way to write plugins that produce `.go` files, however it is specific to this purpose -
-  if you are writing a plugin in Golang that produces Ruby, Python, YAML, etc, you are better-served without the
-  Golang-specific interfaces, and the Golang-specific `protoc` plugin flags that all `protogen`-authored plugins
+  if you are writing a plugin in Go that produces Ruby, Python, YAML, etc, you are better-served without the
+  Go-specific interfaces, and the Go-specific `protoc` plugin flags that all `protogen`-authored plugins
   have added.
 - [`bufbuild/protobuf-es/protoplugin`](https://github.com/bufbuild/protobuf-es/tree/main/packages/protoplugin):
   framework for writing JavaScript/TypeScript plugins that we also authored. It's great! And it backs
   [`protobuf-es`](https://github.com/bufbuild/protobuf-es) and [`connect-es`](https://github.com/connectrpc/connect-es).
 
 It would be great if there were other language-specific frameworks out there, and perhaps we will get to it
-some day. However, `protoplugin` is meant to be the foundational layer that every Golang-authored plugin wants:
+some day. However, `protoplugin` is meant to be the foundational layer that every Go-authored plugin wants:
 it gives you the basics, so you don't have to write them again and again.
 
 ## Status: Alpha
