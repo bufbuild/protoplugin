@@ -65,10 +65,10 @@ func (r *Request) Parameter() string {
 //
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) ToGenerateFileDescriptors(options ...GenerateFileDescriptorsOption) ([]protoreflect.FileDescriptor, error) {
+func (r *Request) ToGenerateFileDescriptors(options ...RequestFileOption) ([]protoreflect.FileDescriptor, error) {
 	requestFileOptions := newRequestFileOptions()
 	for _, option := range options {
-		option.applyGenerateFileDescriptorsOption(requestFileOptions)
+		option.applyRequestFileOption(requestFileOptions)
 	}
 	files, err := r.allFiles(requestFileOptions.sourceRetentionOptions)
 	if err != nil {
@@ -98,10 +98,10 @@ func (r *Request) ToGenerateFileDescriptors(options ...GenerateFileDescriptorsOp
 //
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) AllFiles(options ...AllFilesOption) (*protoregistry.Files, error) {
+func (r *Request) AllFiles(options ...RequestFileOption) (*protoregistry.Files, error) {
 	requestFileOptions := newRequestFileOptions()
 	for _, option := range options {
-		option.applyAllFilesOption(requestFileOptions)
+		option.applyRequestFileOption(requestFileOptions)
 	}
 	return r.allFiles(requestFileOptions.sourceRetentionOptions)
 }
@@ -116,10 +116,10 @@ func (r *Request) AllFiles(options ...AllFilesOption) (*protoregistry.Files, err
 //
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) ToGenerateFileDescriptorProtos(options ...GenerateFileDescriptorProtosOption) ([]*descriptorpb.FileDescriptorProto, error) {
+func (r *Request) ToGenerateFileDescriptorProtos(options ...RequestFileOption) ([]*descriptorpb.FileDescriptorProto, error) {
 	requestFileOptions := newRequestFileOptions()
 	for _, option := range options {
-		option.applyGenerateFileDescriptorProtosOption(requestFileOptions)
+		option.applyRequestFileOption(requestFileOptions)
 	}
 	return r.generateFileDescriptorProtos(requestFileOptions.sourceRetentionOptions)
 }
@@ -137,10 +137,10 @@ func (r *Request) ToGenerateFileDescriptorProtos(options ...GenerateFileDescript
 //
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) AllFileDescriptorProtos(options ...AllFileDescriptorProtosOption) ([]*descriptorpb.FileDescriptorProto, error) {
+func (r *Request) AllFileDescriptorProtos(options ...RequestFileOption) ([]*descriptorpb.FileDescriptorProto, error) {
 	requestFileOptions := newRequestFileOptions()
 	for _, option := range options {
-		option.applyAllFileDescriptorProtosOption(requestFileOptions)
+		option.applyRequestFileOption(requestFileOptions)
 	}
 	return r.allFileDescriptorProtos(requestFileOptions.sourceRetentionOptions)
 }

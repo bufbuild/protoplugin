@@ -16,10 +16,7 @@ package protoplugin
 
 // RequestFileOption is an option for any of the file accessors on a Request.
 type RequestFileOption interface {
-	GenerateFileDescriptorProtosOption
-	AllFilesOption
-	GenerateFileDescriptorProtosOption
-	AllFileDescriptorProtosOption
+	applyRequestFileOption(requestFileOptions *requestFileOptions) error
 }
 
 // WithSourceRetentionOptions returns a new RequestFileOption that says to include
@@ -28,27 +25,10 @@ type RequestFileOption interface {
 // By default, only runtime-retention options are included on generate files. Note that
 // source-retention options are always included on non-generate files.
 func WithSourceRetentionOptions() RequestFileOption {
-	return withSourceRetentionOptions{}
-}
-
-// GenerateFileDescriptorsOption is an option for Request.GenerateFileDescriptors.
-type GenerateFileDescriptorsOption interface {
-	applyGenerateFileDescriptorsOption(requestFileOptions *requestFileOptions)
-}
-
-// AllFilesOption is an option for Request.AllFiles.
-type AllFilesOption interface {
-	applyAllFilesOption(requestFileOptions *requestFileOptions)
-}
-
-// GenerateFileDescriptorProtosOption is an option for Request.GenerateFileDescriptorProtos.
-type GenerateFileDescriptorProtosOption interface {
-	applyGenerateFileDescriptorProtosOption(requestFileOptions *requestFileOptions)
-}
-
-// AllFileDescriptorProtosOption is an option for Request.AllFileDescriptorProtos.
-type AllFileDescriptorProtosOption interface {
-	applyAllFileDescriptorProtosOption(requestFileOptions *requestFileOptions)
+	return applyRequestFileOptionFunc(func(requestFileOptions *requestFileOptions) error {
+		requestFileOptions.sourceRetentionOptions = true
+		return nil
+	})
 }
 
 // RunOption is an option for Main or Run.
@@ -76,22 +56,10 @@ func newRequestFileOptions() *requestFileOptions {
 	return &requestFileOptions{}
 }
 
-type withSourceRetentionOptions struct{}
+type applyRequestFileOptionFunc func(*requestFileOptions) error
 
-func (withSourceRetentionOptions) applyGenerateFileDescriptorsOption(requestFileOptions *requestFileOptions) {
-	requestFileOptions.sourceRetentionOptions = true
-}
-
-func (withSourceRetentionOptions) applyAllFilesOption(requestFileOptions *requestFileOptions) {
-	requestFileOptions.sourceRetentionOptions = true
-}
-
-func (withSourceRetentionOptions) applyGenerateFileDescriptorProtosOption(requestFileOptions *requestFileOptions) {
-	requestFileOptions.sourceRetentionOptions = true
-}
-
-func (withSourceRetentionOptions) applyAllFileDescriptorProtosOption(requestFileOptions *requestFileOptions) {
-	requestFileOptions.sourceRetentionOptions = true
+func (f applyRequestFileOptionFunc) applyRequestFileOption(requestFileOptions *requestFileOptions) error {
+	return f(requestFileOptions)
 }
 
 type runOptions struct {
