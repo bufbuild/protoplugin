@@ -85,7 +85,7 @@ func handle(
 	// plugin has not indicated it will support it.
 	responseWriter.AddFeatureProto3Optional()
 
-	fileDescriptors, err := request.GenerateFileDescriptors()
+	fileDescriptors, err := request.FileDescriptorsToGenerate()
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ A Request exposes two ways to get the file information off of the `CodeGenerator
   and [`*protoregistry.Files`](https://pkg.go.dev/google.golang.org/protobuf@v1.32.0/reflect/protoregistry#Files)
 - Directly via the `FileDescriptorProtos`.
 
-The methods `GenerateFileDescriptors` and `GenerateFileDescriptorProtos` will provide file information
+The methods `FileDescriptorsToGenerate` and `FileDescriptorProtosToGenerate` will provide file information
 only for those files specified in `file_to_generate`, while `AllFiles` and `AllFileDescriptorProtos`
 will provide file information for all files in `proto_file`.
 

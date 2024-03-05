@@ -55,13 +55,13 @@ func (r *Request) Parameter() string {
 	return r.codeGeneratorRequest.GetParameter()
 }
 
-// GenerateFileDescriptors returns the FileDescriptors for the files specified by the
+// FileDescriptorsToGenerate returns the FileDescriptors for the files specified by the
 // file_to_generate field on the CodeGeneratorRequest.
 //
 // The caller can assume that all FileDescriptors have a valid path as the name field.
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) GenerateFileDescriptors() ([]protoreflect.FileDescriptor, error) {
+func (r *Request) FileDescriptorsToGenerate() ([]protoreflect.FileDescriptor, error) {
 	files, err := r.AllFiles()
 	if err != nil {
 		return nil, err
@@ -90,13 +90,13 @@ func (r *Request) AllFiles() (*protoregistry.Files, error) {
 	return protodesc.NewFiles(&descriptorpb.FileDescriptorSet{File: r.AllFileDescriptorProtos()})
 }
 
-// GenerateFileDescriptorProtos returns the FileDescriptors for the files specified by the
+// FileDescriptorProtosToGenerate returns the FileDescriptors for the files specified by the
 // file_to_generate field.
 //
 // The caller can assume that all FileDescriptorProtoss have a valid path as the name field.
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func (r *Request) GenerateFileDescriptorProtos() []*descriptorpb.FileDescriptorProto {
+func (r *Request) FileDescriptorProtosToGenerate() []*descriptorpb.FileDescriptorProto {
 	// If we want source-retention options, source_file_descriptors is all we need.
 	//
 	// We have validated that source_file_descriptors is populated via WithSourceRetentionOptions.

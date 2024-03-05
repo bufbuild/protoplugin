@@ -49,7 +49,7 @@ func TestBasic(t *testing.T) {
 				responseWriter *ResponseWriter,
 				request *Request,
 			) error {
-				for _, fileDescriptorProto := range request.GenerateFileDescriptorProtos() {
+				for _, fileDescriptorProto := range request.FileDescriptorProtosToGenerate() {
 					topLevelMessageNames := make([]string, len(fileDescriptorProto.GetMessageType()))
 					for i, descriptorProto := range fileDescriptorProto.GetMessageType() {
 						topLevelMessageNames[i] = descriptorProto.GetName()

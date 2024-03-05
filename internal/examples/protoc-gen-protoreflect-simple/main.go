@@ -44,7 +44,7 @@ func handle(
 	// plugin has not indicated it will support it.
 	responseWriter.AddFeatureProto3Optional()
 
-	fileDescriptors, err := request.GenerateFileDescriptors()
+	fileDescriptors, err := request.FileDescriptorsToGenerate()
 	if err != nil {
 		return err
 	}
