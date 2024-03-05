@@ -1,5 +1,4 @@
-protoplugin
-==============
+# protoplugin
 
 [![Build](https://github.com/bufbuild/protoplugin/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/bufbuild/protoplugin/actions/workflows/ci.yaml)
 [![Report Card](https://goreportcard.com/badge/github.com/bufbuild/protoplugin)](https://goreportcard.com/report/github.com/bufbuild/protoplugin)
@@ -85,7 +84,7 @@ func handle(
 	// plugin has not indicated it will support it.
 	responseWriter.AddFeatureProto3Optional()
 
-	fileDescriptors, err := request.GenerateFileDescriptors()
+	fileDescriptors, err := request.ToGenerateFileDescriptors()
 	if err != nil {
 		return err
 	}
@@ -141,7 +140,7 @@ A Request exposes two ways to get the file information off of the `CodeGenerator
   and [`*protoregistry.Files`](https://pkg.go.dev/google.golang.org/protobuf@v1.32.0/reflect/protoregistry#Files)
 - Directly via the `FileDescriptorProtos`.
 
-The methods `GenerateFileDescriptors` and `GenerateFileDescriptorProtos` will provide file information
+The methods `ToGenerateFileDescriptors` and `ToGenerateFileDescriptorProtos` will provide file information
 only for those files specified in `file_to_generate`, while `AllFiles` and `AllFileDescriptorProtos`
 will provide file information for all files in `proto_file`.
 
