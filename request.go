@@ -68,7 +68,9 @@ func (r *Request) Parameter() string {
 func (r *Request) ToGenerateFileDescriptors(options ...RequestFileOption) ([]protoreflect.FileDescriptor, error) {
 	requestFileOptions := newRequestFileOptions()
 	for _, option := range options {
-		option.applyRequestFileOption(requestFileOptions)
+		if err := option.applyRequestFileOption(requestFileOptions); err != nil {
+			return nil, err
+		}
 	}
 	files, err := r.allFiles(requestFileOptions.sourceRetentionOptions)
 	if err != nil {
@@ -101,7 +103,9 @@ func (r *Request) ToGenerateFileDescriptors(options ...RequestFileOption) ([]pro
 func (r *Request) AllFiles(options ...RequestFileOption) (*protoregistry.Files, error) {
 	requestFileOptions := newRequestFileOptions()
 	for _, option := range options {
-		option.applyRequestFileOption(requestFileOptions)
+		if err := option.applyRequestFileOption(requestFileOptions); err != nil {
+			return nil, err
+		}
 	}
 	return r.allFiles(requestFileOptions.sourceRetentionOptions)
 }
@@ -119,7 +123,9 @@ func (r *Request) AllFiles(options ...RequestFileOption) (*protoregistry.Files, 
 func (r *Request) ToGenerateFileDescriptorProtos(options ...RequestFileOption) ([]*descriptorpb.FileDescriptorProto, error) {
 	requestFileOptions := newRequestFileOptions()
 	for _, option := range options {
-		option.applyRequestFileOption(requestFileOptions)
+		if err := option.applyRequestFileOption(requestFileOptions); err != nil {
+			return nil, err
+		}
 	}
 	return r.toGenerateFileDescriptorProtos(requestFileOptions.sourceRetentionOptions)
 }
@@ -140,7 +146,9 @@ func (r *Request) ToGenerateFileDescriptorProtos(options ...RequestFileOption) (
 func (r *Request) AllFileDescriptorProtos(options ...RequestFileOption) ([]*descriptorpb.FileDescriptorProto, error) {
 	requestFileOptions := newRequestFileOptions()
 	for _, option := range options {
-		option.applyRequestFileOption(requestFileOptions)
+		if err := option.applyRequestFileOption(requestFileOptions); err != nil {
+			return nil, err
+		}
 	}
 	return r.allFileDescriptorProtos(requestFileOptions.sourceRetentionOptions)
 }
