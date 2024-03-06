@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
@@ -44,7 +45,7 @@ func Main(handler Handler, options ...MainOption) {
 		option.applyMainOption(runOptions)
 	}
 	ctx, cancel := withCancelInterruptSignal(context.Background())
-	if err := run(ctx, os.Args, os.Stdin, os.Stdout, os.Stderr, handler, runOptions); err != nil {
+	if err := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, handler, runOptions); err != nil {
 		exitError := &exec.ExitError{}
 		if errors.As(err, &exitError) {
 			cancel()
@@ -90,10 +91,15 @@ type MainOption interface {
 // Implementers of warningHandlerFunc can assume that errors passed will be non-nil and have non-empty
 // values for err.Error().
 func WithWarningHandler(warningHandlerFunc func(error)) MainOption {
-	return &warningHandlerOption{warningHandlerFunc: warningHandlerFunc}
+	return mainOptionsFunc(func(runOptions *runOptions) {
+		runOptions.warningHandlerFunc = warningHandlerFunc
+	})
 }
 
-// WithVersion returns a new MainOption that says to print the given version string to stdout and exit.
+// WithVersion returns a new MainOption that will result in the given version string being printed
+// to stdout if the plugin is given the --version flag.
+//
+// The default is no version flag is installed.
 func WithVersion(version string) MainOption {
 	return mainOptionsFunc(func(runOptions *runOptions) {
 		runOptions.version = version
@@ -118,17 +124,17 @@ func run(
 	handler Handler,
 	runOptions *runOptions,
 ) error {
-	if len(args) > 1 {
-		name := args[0]
-		for _, arg := range args[1:] {
-			switch arg {
-			case "--version", "-version":
-				_, _ = fmt.Fprintf(stdout, "%s: %s\n", name, runOptions.version)
-				return nil
-			default:
-				return fmt.Errorf("%s: unknown argument: %s", name, arg)
-			}
+	fmt.Println("here")
+	switch len(args) {
+	case 0:
+	case 1:
+		if args[0] == "--version" {
+			_, err := fmt.Fprintln(stdout, args[0])
+			return err
 		}
+		return fmt.Errorf("unknown argument: %s", args[0])
+	default:
+		return fmt.Errorf("unknown arguments: %v", strings.Join(args, " "))
 	}
 
 	warningHandlerFunc := runOptions.warningHandlerFunc
@@ -193,6 +199,10 @@ type runOptions struct {
 	version            string
 }
 
+func newRunOptions() *runOptions {
+	return &runOptions{}
+}
+
 type mainOptionsFunc func(*runOptions)
 
 func (f mainOptionsFunc) applyMainOption(runOptions *runOptions) {
@@ -201,20 +211,4 @@ func (f mainOptionsFunc) applyMainOption(runOptions *runOptions) {
 
 func (f mainOptionsFunc) applyRunOption(runOptions *runOptions) {
 	f(runOptions)
-}
-
-func newRunOptions() *runOptions {
-	return &runOptions{}
-}
-
-type warningHandlerOption struct {
-	warningHandlerFunc func(error)
-}
-
-func (w *warningHandlerOption) applyMainOption(runOptions *runOptions) {
-	runOptions.warningHandlerFunc = w.warningHandlerFunc
-}
-
-func (w *warningHandlerOption) applyRunOption(runOptions *runOptions) {
-	runOptions.warningHandlerFunc = w.warningHandlerFunc
 }
