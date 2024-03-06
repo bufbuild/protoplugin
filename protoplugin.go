@@ -124,12 +124,11 @@ func run(
 	handler Handler,
 	runOptions *runOptions,
 ) error {
-	fmt.Println("here")
 	switch len(args) {
 	case 0:
 	case 1:
-		if args[0] == "--version" {
-			_, err := fmt.Fprintln(stdout, args[0])
+		if runOptions.version != "" && args[0] == "--version" {
+			_, err := fmt.Fprintln(stdout, runOptions.version)
 			return err
 		}
 		return fmt.Errorf("unknown argument: %s", args[0])
@@ -137,9 +136,8 @@ func run(
 		return fmt.Errorf("unknown arguments: %v", strings.Join(args, " "))
 	}
 
-	warningHandlerFunc := runOptions.warningHandlerFunc
-	if warningHandlerFunc == nil {
-		warningHandlerFunc = func(err error) { _, _ = fmt.Fprintln(stderr, err.Error()) }
+	if runOptions.warningHandlerFunc == nil {
+		runOptions.warningHandlerFunc = func(err error) { _, _ = fmt.Fprintln(stderr, err.Error()) }
 	}
 
 	input, err := io.ReadAll(stdin)
@@ -154,7 +152,7 @@ func run(
 	if err != nil {
 		return err
 	}
-	responseWriter := newResponseWriter(warningHandlerFunc)
+	responseWriter := newResponseWriter(runOptions.warningHandlerFunc)
 	if err := handler.Handle(ctx, responseWriter, request); err != nil {
 		return err
 	}
