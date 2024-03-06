@@ -44,7 +44,7 @@ func Main(handler Handler, options ...MainOption) {
 		option.applyMainOption(runOptions)
 	}
 	ctx, cancel := withCancelInterruptSignal(context.Background())
-	if err := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, handler, runOptions); err != nil {
+	if err := run(ctx, os.Args, os.Stdin, os.Stdout, os.Stderr, handler, runOptions); err != nil {
 		exitError := &exec.ExitError{}
 		if errors.As(err, &exitError) {
 			cancel()
@@ -93,6 +93,13 @@ func WithWarningHandler(warningHandlerFunc func(error)) MainOption {
 	return &warningHandlerOption{warningHandlerFunc: warningHandlerFunc}
 }
 
+// WithVersion returns a new MainOption that says to print the given version string to stdout and exit.
+func WithVersion(version string) MainOption {
+	return mainOptionsFunc(func(runOptions *runOptions) {
+		runOptions.version = version
+	})
+}
+
 // RunOption is an option for Run.
 //
 // Note that MainOptions are also RunOptions, so all MainOptions can also be passed to Run.
@@ -111,8 +118,18 @@ func run(
 	handler Handler,
 	runOptions *runOptions,
 ) error {
-	// Reserving args so we can use it for flags.
-	_ = args
+	if len(args) > 0 {
+		name := args[0]
+		for _, arg := range args[1:] {
+			switch arg {
+			case "--version", "-version":
+				_, _ = fmt.Fprintf(stdout, "%s: %s\n", name, runOptions.version)
+				return nil
+			default:
+				return fmt.Errorf("%s: unknown argument: %s", name, arg)
+			}
+		}
+	}
 
 	warningHandlerFunc := runOptions.warningHandlerFunc
 	if warningHandlerFunc == nil {
@@ -173,6 +190,17 @@ func newInterruptSignalChannel() (<-chan os.Signal, func()) {
 
 type runOptions struct {
 	warningHandlerFunc func(error)
+	version            string
+}
+
+type mainOptionsFunc func(*runOptions)
+
+func (f mainOptionsFunc) applyMainOption(runOptions *runOptions) {
+	f(runOptions)
+}
+
+func (f mainOptionsFunc) applyRunOption(runOptions *runOptions) {
+	f(runOptions)
 }
 
 func newRunOptions() *runOptions {
