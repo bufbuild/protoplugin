@@ -28,8 +28,10 @@ import (
 	"google.golang.org/protobuf/compiler/protogen"
 )
 
+const version = "0.0.1"
+
 func main() {
-	protoplugin.Main(protoplugin.HandlerFunc(handle))
+	protoplugin.Main(protoplugin.HandlerFunc(handle), protoplugin.WithVersion(version))
 }
 
 func handle(

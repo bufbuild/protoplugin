@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
@@ -90,7 +91,19 @@ type MainOption interface {
 // Implementers of warningHandlerFunc can assume that errors passed will be non-nil and have non-empty
 // values for err.Error().
 func WithWarningHandler(warningHandlerFunc func(error)) MainOption {
-	return &warningHandlerOption{warningHandlerFunc: warningHandlerFunc}
+	return mainOptionsFunc(func(runOptions *runOptions) {
+		runOptions.warningHandlerFunc = warningHandlerFunc
+	})
+}
+
+// WithVersion returns a new MainOption that will result in the given version string being printed
+// to stdout if the plugin is given the --version flag.
+//
+// The default is no version flag is installed.
+func WithVersion(version string) MainOption {
+	return mainOptionsFunc(func(runOptions *runOptions) {
+		runOptions.version = version
+	})
 }
 
 // RunOption is an option for Run.
@@ -111,12 +124,20 @@ func run(
 	handler Handler,
 	runOptions *runOptions,
 ) error {
-	// Reserving args so we can use it for flags.
-	_ = args
+	switch len(args) {
+	case 0:
+	case 1:
+		if runOptions.version != "" && args[0] == "--version" {
+			_, err := fmt.Fprintln(stdout, runOptions.version)
+			return err
+		}
+		return fmt.Errorf("unknown argument: %s", args[0])
+	default:
+		return fmt.Errorf("unknown arguments: %v", strings.Join(args, " "))
+	}
 
-	warningHandlerFunc := runOptions.warningHandlerFunc
-	if warningHandlerFunc == nil {
-		warningHandlerFunc = func(err error) { _, _ = fmt.Fprintln(stderr, err.Error()) }
+	if runOptions.warningHandlerFunc == nil {
+		runOptions.warningHandlerFunc = func(err error) { _, _ = fmt.Fprintln(stderr, err.Error()) }
 	}
 
 	input, err := io.ReadAll(stdin)
@@ -131,7 +152,7 @@ func run(
 	if err != nil {
 		return err
 	}
-	responseWriter := newResponseWriter(warningHandlerFunc)
+	responseWriter := newResponseWriter(runOptions.warningHandlerFunc)
 	if err := handler.Handle(ctx, responseWriter, request); err != nil {
 		return err
 	}
@@ -173,20 +194,19 @@ func newInterruptSignalChannel() (<-chan os.Signal, func()) {
 
 type runOptions struct {
 	warningHandlerFunc func(error)
+	version            string
 }
 
 func newRunOptions() *runOptions {
 	return &runOptions{}
 }
 
-type warningHandlerOption struct {
-	warningHandlerFunc func(error)
+type mainOptionsFunc func(*runOptions)
+
+func (f mainOptionsFunc) applyMainOption(runOptions *runOptions) {
+	f(runOptions)
 }
 
-func (w *warningHandlerOption) applyMainOption(runOptions *runOptions) {
-	runOptions.warningHandlerFunc = w.warningHandlerFunc
-}
-
-func (w *warningHandlerOption) applyRunOption(runOptions *runOptions) {
-	runOptions.warningHandlerFunc = w.warningHandlerFunc
+func (f mainOptionsFunc) applyRunOption(runOptions *runOptions) {
+	f(runOptions)
 }
