@@ -203,7 +203,7 @@ and doesn't intend to be. The only language-specific framework in wide use that 
   if you are writing a plugin in Go that produces Ruby, Python, YAML, etc, you are better-served without the
   Go-specific interfaces, and the Go-specific `protoc` plugin flags that all `protogen`-authored plugins
   have added.
-- [`bufbuild/protobuf-es/protoplugin`](https://github.com/bufbuild/protobuf-es/tree/main/packages/protoplugin):
+- [`@bufbuild/protoplugin`](https://www.npmjs.com/package/@bufbuild/protoplugin):
   framework for writing JavaScript/TypeScript plugins that we also authored. It's great! And it backs
   [`protobuf-es`](https://github.com/bufbuild/protobuf-es) and [`connect-es`](https://github.com/connectrpc/connect-es).
 
