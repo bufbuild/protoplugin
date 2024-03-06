@@ -118,7 +118,7 @@ func run(
 	handler Handler,
 	runOptions *runOptions,
 ) error {
-	if len(args) > 0 {
+	if len(args) > 1 {
 		name := args[0]
 		for _, arg := range args[1:] {
 			switch arg {
