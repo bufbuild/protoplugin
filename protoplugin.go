@@ -215,8 +215,8 @@ type unknownArgumentsError struct {
 	args []string
 }
 
-func newUnknownArgumentsError(arguments []string) error {
-	return &unknownArgumentsError{args: arguments}
+func newUnknownArgumentsError(args []string) error {
+	return &unknownArgumentsError{args: args}
 }
 
 func (e *unknownArgumentsError) Error() string {
