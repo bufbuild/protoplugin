@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/protoutil"
@@ -66,6 +67,38 @@ func TestBasic(t *testing.T) {
 			"a.proto.txt": "A1\nA2\n",
 		},
 	)
+}
+
+func TestWithVersionOption(t *testing.T) {
+	t.Parallel()
+
+	run := func(args []string, runOptions ...RunOption) (string, error) {
+		stdout := bytes.NewBuffer(nil)
+		err := Run(
+			context.Background(),
+			args,
+			iotest.ErrReader(io.EOF),
+			stdout,
+			io.Discard,
+			HandlerFunc(func(ctx context.Context, w *ResponseWriter, r *Request) error { return nil }),
+			runOptions...,
+		)
+		return stdout.String(), err
+	}
+
+	var unknownArgumentsError *unknownArgumentsError
+	_, err := run([]string{"--unsupported"})
+	require.ErrorAs(t, err, &unknownArgumentsError)
+	_, err = run([]string{"--unsupported"}, WithVersion("0.0.1"))
+	require.ErrorAs(t, err, &unknownArgumentsError)
+	_, err = run([]string{"--version"})
+	require.ErrorAs(t, err, &unknownArgumentsError)
+	_, err = run([]string{"--foo", "--bar"})
+	require.ErrorAs(t, err, &unknownArgumentsError)
+
+	out, err := run([]string{"--version"}, WithVersion("0.0.1"))
+	require.NoError(t, err)
+	require.Equal(t, "0.0.1\n", out)
 }
 
 func testBasic(
