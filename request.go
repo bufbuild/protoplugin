@@ -28,19 +28,7 @@ import (
 
 // Request wraps a CodeGeneratorRequest.
 //
-// The backing CodeGeneratorRequest has been validated to conform to the following:
-//
-//   - The CodeGeneratorRequest will not be nil.
-//   - FileToGenerate and ProtoFile will be non-empty.
-//   - Each FileDescriptorProto in ProtoFile will have a valid path as the name field.
-//   - Each value of FileToGenerate will be a valid path.
-//   - Each value of FileToGenerate will have a corresponding value in ProtoFile.
-//   - Each FileDescriptorProto in SourceFileDescriptors will have a valid path as the name field.
-//   - SourceFileDescriptors is either empty, or the values of FileToGenerate will have a 1-1 mapping
-//     to the names in SourceFileDescriptors.
-//
-// Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
-// and have `.proto` as the file extension.
+// The backing CodeGeneratorRequest has been validated per the documentation of ValidateCodeGeneratorRequest.
 type Request struct {
 	codeGeneratorRequest *pluginpb.CodeGeneratorRequest
 
@@ -192,7 +180,7 @@ func (r *Request) WithSourceRetentionOptions() (*Request, error) {
 // *** PRIVATE ***
 
 func newRequest(codeGeneratorRequest *pluginpb.CodeGeneratorRequest) (*Request, error) {
-	if err := validateCodeGeneratorRequest(codeGeneratorRequest); err != nil {
+	if err := ValidateCodeGeneratorRequest(codeGeneratorRequest); err != nil {
 		return nil, err
 	}
 	request := &Request{

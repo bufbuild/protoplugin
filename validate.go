@@ -24,18 +24,42 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
+// ValidateCodeGeneratorRequest validates that the CodeGeneratorRequest conforms to the following:
+//
+//   - The CodeGeneratorRequest will not be nil.
+//   - file_to_generate and proto_file will be non-empty.
+//   - Each FileDescriptorProto in proto_file and source_file_descriptors will have valid paths
+//     as the name and dependency fields.
+//   - Each FileDescriptorProto in proto_file and source_file_descriptors will have unique name fields.
+//   - Each FileDescriptorProto in proto_file and source_file_descriptors will have unique values of their
+//     dependency fields, that is there will be no duplicates within a single FileDescriptorProto.
+//   - source_file_descriptors is either empty, or the values of file_to_generate will have a 1-1 mapping
+//     to the names in source_file_descriptors.
+//   - Each value of file_to_generate will be a valid path.
+//   - Each value of file_to_generate will have a corresponding value in proto_file.
+//   - The major, minor, and patch versions of compiler_version will be non-negative.
+//
+// Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
+// and have `.proto` as the file extension.
+func ValidateCodeGeneratorRequest(request *pluginpb.CodeGeneratorRequest) error {
+	if err := validateCodeGeneratorRequest(request); err != nil {
+		return fmt.Errorf("CodeGeneratorRequest: %w", err)
+	}
+	return nil
+}
+
 func validateCodeGeneratorRequest(request *pluginpb.CodeGeneratorRequest) error {
 	if request == nil {
-		return errors.New("CodeGeneratorRequest: nil")
+		return errors.New("nil")
 	}
 	if len(request.GetProtoFile()) == 0 {
-		return errors.New("CodeGeneratorRequest.proto_file: empty")
+		return errors.New("proto_file: empty")
 	}
 	if len(request.GetFileToGenerate()) == 0 {
-		return errors.New("CodeGeneratorRequest.file_to_generate: empty")
+		return errors.New("file_to_generate: empty")
 	}
-	if err := validateProtoPaths(request.GetFileToGenerate()); err != nil {
-		return fmt.Errorf("CodeGeneratorRequest.file_to_generate: %w", err)
+	if err := validateProtoPaths("file_to_generate", request.GetFileToGenerate()); err != nil {
+		return err
 	}
 	if err := validateCodeGeneratorRequestFileDescriptorProtos(
 		"proto_file",
@@ -57,13 +81,13 @@ func validateCodeGeneratorRequest(request *pluginpb.CodeGeneratorRequest) error 
 	}
 	if version := request.GetCompilerVersion(); version != nil {
 		if major := version.GetMajor(); major < 0 {
-			return fmt.Errorf("CodeGeneratorRequest.compiler_version.major is negative: %d", int(major))
+			return fmt.Errorf("compiler_version.major: negative: %d", int(major))
 		}
 		if minor := version.GetMinor(); minor < 0 {
-			return fmt.Errorf("CodeGeneratorRequest.compiler_version.minor is negative: %d", int(minor))
+			return fmt.Errorf("compiler_version.minor: negative: %d", int(minor))
 		}
 		if patch := version.GetPatch(); patch < 0 {
-			return fmt.Errorf("CodeGeneratorRequest.compiler_version.patch is negative: %d", int(patch))
+			return fmt.Errorf("compiler_version.patch: negative: %d", int(patch))
 		}
 	}
 	return nil
@@ -80,18 +104,18 @@ func validateCodeGeneratorRequestFileDescriptorProtos(
 ) error {
 	fileDescriptorProtoNameMap := make(map[string]struct{}, len(fileDescriptorProtos))
 	for _, fileDescriptorProto := range fileDescriptorProtos {
-		if err := validateFileDescriptorProto(fileDescriptorProto); err != nil {
-			return fmt.Errorf("CodeGeneratorRequest.%s: %w", fieldName, err)
+		if err := validateFileDescriptorProto(fieldName, fileDescriptorProto); err != nil {
+			return err
 		}
 		fileDescriptorProtoName := fileDescriptorProto.GetName()
 		if _, ok := fileDescriptorProtoNameMap[fileDescriptorProtoName]; ok {
-			return fmt.Errorf("CodeGeneratorRequest.%s: duplicate path %q", fieldName, fileDescriptorProtoName)
+			return fmt.Errorf("%s: duplicate path %q", fieldName, fileDescriptorProtoName)
 		}
 		fileDescriptorProtoNameMap[fileDescriptorProtoName] = struct{}{}
 	}
 	for _, fileToGenerate := range filesToGenerate {
 		if _, ok := fileDescriptorProtoNameMap[fileToGenerate]; !ok {
-			return fmt.Errorf("CodeGeneratorRequest.file_to_generate: path %q is not contained within %s", fileToGenerate, fieldName)
+			return fmt.Errorf("file_to_generate: path %q is not contained within %s", fileToGenerate, fieldName)
 		}
 	}
 	if equalToOrSupersetOfFilesToGenerate {
@@ -103,31 +127,37 @@ func validateCodeGeneratorRequestFileDescriptorProtos(
 		}
 		for fileDescriptorProtoName := range fileDescriptorProtoNameMap {
 			if _, ok := filesToGenerateMap[fileDescriptorProtoName]; !ok {
-				return fmt.Errorf("CodeGeneratorRequest.%s: path %q is not contained within file_to_generate", fieldName, fileDescriptorProtoName)
+				return fmt.Errorf("%s: path %q is not contained within file_to_generate", fieldName, fileDescriptorProtoName)
 			}
 		}
 	}
 	return nil
 }
 
-func validateFileDescriptorProto(fileDescriptorProto *descriptorpb.FileDescriptorProto) error {
+func validateFileDescriptorProto(fieldName string, fileDescriptorProto *descriptorpb.FileDescriptorProto) error {
 	if fileDescriptorProto == nil {
-		return errors.New("FileDescriptorProto: nil")
+		return fmt.Errorf("%s: nil", fieldName)
 	}
-	if err := validateProtoPath(fileDescriptorProto.GetName()); err != nil {
-		return fmt.Errorf("FileDescriptorProto.name: %w", err)
+	if err := validateProtoPath(fieldName+".name", fileDescriptorProto.GetName()); err != nil {
+		return err
 	}
-	if err := validateProtoPaths(fileDescriptorProto.GetDependency()); err != nil {
-		return fmt.Errorf("FileDescriptorProto.dependency %w", err)
+	if err := validateProtoPaths(fieldName+".dependency", fileDescriptorProto.GetDependency()); err != nil {
+		return err
 	}
 	return nil
 }
 
-func validateProtoPaths(paths []string) error {
+// validateProtoPaths validates with validateProtoPaths, and ensures that the paths are unique.
+func validateProtoPaths(fieldName string, paths []string) error {
+	pathMap := make(map[string]struct{}, len(paths))
 	for _, path := range paths {
-		if err := validateProtoPath(path); err != nil {
+		if err := validateProtoPath(fieldName, path); err != nil {
 			return err
 		}
+		if _, ok := pathMap[path]; ok {
+			return fmt.Errorf("%s: duplicate path %q", fieldName, path)
+		}
+		pathMap[path] = struct{}{}
 	}
 	return nil
 }
@@ -135,12 +165,12 @@ func validateProtoPaths(paths []string) error {
 // validateProtoPath validates that the path is non-empty, relative, uses '/' as the
 // path separator, is equal to filepath.ToSlash(filepath.Clean(path)),
 // and has .proto as the file extension.
-func validateProtoPath(path string) error {
+func validateProtoPath(fieldName string, path string) error {
 	if err := validateAndCheckNormalizedPath(path); err != nil {
-		return err
+		return fmt.Errorf("%s: %w", fieldName, err)
 	}
 	if filepath.Ext(path) != ".proto" {
-		return fmt.Errorf("expected path %q to have the .proto file extension", path)
+		return fmt.Errorf("%s: expected path %q to have the .proto file extension", fieldName, path)
 	}
 	return nil
 }
