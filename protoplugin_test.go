@@ -86,18 +86,15 @@ func TestWithVersionOption(t *testing.T) {
 		return stdout.String(), err
 	}
 
+	var unknownArgumentsError *unknownArgumentsError
 	_, err := run([]string{"--unsupported"})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unknown argument")
+	require.ErrorAs(t, err, &unknownArgumentsError)
 	_, err = run([]string{"--unsupported"}, WithVersion("0.0.1"))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unknown argument")
+	require.ErrorAs(t, err, &unknownArgumentsError)
 	_, err = run([]string{"--version"})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unknown argument")
+	require.ErrorAs(t, err, &unknownArgumentsError)
 	_, err = run([]string{"--foo", "--bar"})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unknown arguments")
+	require.ErrorAs(t, err, &unknownArgumentsError)
 
 	out, err := run([]string{"--version"}, WithVersion("0.0.1"))
 	require.NoError(t, err)
