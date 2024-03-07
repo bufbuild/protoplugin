@@ -83,7 +83,11 @@ func validateCodeGeneratorRequestFileDescriptorProtos(
 		if err := validateFileDescriptorProto(fileDescriptorProto); err != nil {
 			return fmt.Errorf("CodeGeneratorRequest.%s: %w", fieldName, err)
 		}
-		fileDescriptorProtoNameMap[fileDescriptorProto.GetName()] = struct{}{}
+		fileDescriptorProtoName := fileDescriptorProto.GetName()
+		if _, ok := fileDescriptorProtoNameMap[fileDescriptorProtoName]; ok {
+			return fmt.Errorf("CodeGeneratorRequest.%s: duplicate path %q", fieldName, fileDescriptorProtoName)
+		}
+		fileDescriptorProtoNameMap[fileDescriptorProtoName] = struct{}{}
 	}
 	for _, fileToGenerate := range filesToGenerate {
 		if _, ok := fileDescriptorProtoNameMap[fileToGenerate]; !ok {
