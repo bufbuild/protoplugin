@@ -116,6 +116,8 @@ to be written to the [`ResponseWriter`](https://pkg.go.dev/github.com/bufbuild/p
 A `Request` wraps a `CodeGeneratorRequest`, but performs common-sense validation. The `Handler` can assume
 all of the following is true:
 
+TODO: Update with latest validation
+
 - The `CodeGeneratorRequest` given to the plugin was not nil.
 - `file_to_generate and `proto_file were not empty.
 - Each `FileDescriptorProto` in `proto_file` will have a valid path (see below) as the `name` field.
