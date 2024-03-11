@@ -27,8 +27,6 @@ import (
 )
 
 // Request wraps a CodeGeneratorRequest.
-//
-// The backing CodeGeneratorRequest has been validated per the documentation of ValidateCodeGeneratorRequest.
 type Request struct {
 	codeGeneratorRequest *pluginpb.CodeGeneratorRequest
 
@@ -180,7 +178,7 @@ func (r *Request) WithSourceRetentionOptions() (*Request, error) {
 // *** PRIVATE ***
 
 func newRequest(codeGeneratorRequest *pluginpb.CodeGeneratorRequest) (*Request, error) {
-	if err := ValidateCodeGeneratorRequest(codeGeneratorRequest); err != nil {
+	if err := validateCodeGeneratorRequest(codeGeneratorRequest); err != nil {
 		return nil, err
 	}
 	request := &Request{

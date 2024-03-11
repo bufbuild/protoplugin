@@ -23,7 +23,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"strings"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
@@ -209,19 +208,4 @@ func (f mainOptionsFunc) applyMainOption(runOptions *runOptions) {
 
 func (f mainOptionsFunc) applyRunOption(runOptions *runOptions) {
 	f(runOptions)
-}
-
-type unknownArgumentsError struct {
-	args []string
-}
-
-func newUnknownArgumentsError(args []string) error {
-	return &unknownArgumentsError{args: args}
-}
-
-func (e *unknownArgumentsError) Error() string {
-	if len(e.args) == 1 {
-		return fmt.Sprintf("unknown argument: %s", e.args[0])
-	}
-	return fmt.Sprintf("unknown arguments: %s", strings.Join(e.args, " "))
 }

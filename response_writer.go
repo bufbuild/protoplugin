@@ -131,7 +131,7 @@ func (r *ResponseWriter) AddCodeGeneratorResponseFiles(files ...*pluginpb.CodeGe
 			r.addSystemError(fmt.Errorf("CodeGeneratorResponse.File: name: empty"))
 			return
 		}
-		normalizedName, err := validateAndNormalizePath(name)
+		normalizedName, err := validateAndNormalizePath("", name)
 		if err != nil {
 			r.addSystemError(fmt.Errorf("CodeGeneratorResponse.File: %w", err))
 			return
@@ -152,7 +152,7 @@ func (r *ResponseWriter) AddCodeGeneratorResponseFiles(files ...*pluginpb.CodeGe
 	}
 }
 
-// SetSupportedFeaturessets the given features on the response.
+// SetSupportedFeatures the given features on the response.
 //
 // You likely want to use the specific feature functions instead of this function.
 // This function is for lower-level access.

@@ -20,11 +20,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
-// ValidateCodeGeneratorRequest validates that the CodeGeneratorRequest conforms to the following:
+// validateCodeGeneratorRequest validates that the CodeGeneratorRequest conforms to the following:
 //
 //   - The CodeGeneratorRequest will not be nil.
 //   - file_to_generate and proto_file will be non-empty.
@@ -41,14 +42,13 @@ import (
 //
 // Paths are considered valid if they are non-empty, relative, use '/' as the path separator, do not jump context,
 // and have `.proto` as the file extension.
-func ValidateCodeGeneratorRequest(request *pluginpb.CodeGeneratorRequest) error {
-	if err := validateCodeGeneratorRequest(request); err != nil {
-		return fmt.Errorf("CodeGeneratorRequest: %w", err)
-	}
-	return nil
-}
+func validateCodeGeneratorRequest(request *pluginpb.CodeGeneratorRequest) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			retErr = fmt.Errorf("CodeGeneratorRequest: %w", retErr)
+		}
+	}()
 
-func validateCodeGeneratorRequest(request *pluginpb.CodeGeneratorRequest) error {
 	if request == nil {
 		return errors.New("nil")
 	}
@@ -58,7 +58,7 @@ func validateCodeGeneratorRequest(request *pluginpb.CodeGeneratorRequest) error 
 	if len(request.GetFileToGenerate()) == 0 {
 		return errors.New("file_to_generate: empty")
 	}
-	if err := validateProtoPaths("file_to_generate", request.GetFileToGenerate()); err != nil {
+	if err := validateAndCheckProtoPathsAreNormalized("file_to_generate", request.GetFileToGenerate()); err != nil {
 		return err
 	}
 	if err := validateCodeGeneratorRequestFileDescriptorProtos(
@@ -134,24 +134,94 @@ func validateCodeGeneratorRequestFileDescriptorProtos(
 	return nil
 }
 
+func validateAndModifyCodeGeneratorResponse(
+	response *pluginpb.CodeGeneratorResponse,
+	// Non-nil if non-critical errors should be warnings instead of errors.
+	//
+	// If not set, no modifications will be performed.
+	warningHandler func(error),
+) (retErr error) {
+	defer func() {
+		if retErr != nil {
+			retErr = fmt.Errorf("CodeGeneratorResponse: %w", retErr)
+		}
+	}()
+
+	fileNames := make(map[string]struct{})
+	resultFiles := make([]*pluginpb.CodeGeneratorResponse_File, 0, len(response.File))
+	for _, file := range response.File {
+		name := file.GetName()
+		insertionPoint := file.GetInsertionPoint()
+		if err := validateAndModifyCodeGeneratorResponseFile("file", file, warningHandler); err != nil {
+			return err
+		}
+		// If insertionPoint is set, it is valid and correct to have a duplicate file.
+		if _, ok := fileNames[name]; ok && insertionPoint == "" {
+			if warningHandler != nil {
+				warningHandler(newDuplicateCodeGeneratorResponseFileNameError(name, true))
+			} else {
+				return newDuplicateCodeGeneratorResponseFileNameError(name, false)
+			}
+		} else {
+			// Not a duplicate, add to result files.
+			resultFiles = append(resultFiles, file)
+			fileNames[name] = struct{}{}
+		}
+	}
+	// Avoid unnecessary modifications of response.File in the case where we had no difference.
+	if len(response.File) != len(resultFiles) {
+		response.File = resultFiles
+	}
+	return nil
+}
+
+func validateAndModifyCodeGeneratorResponseFile(
+	fieldName string,
+	file *pluginpb.CodeGeneratorResponse_File,
+	// Non-nil if non-critical errors should be warnings instead of errors.
+	warningHandler func(error),
+) error {
+	name := file.GetName()
+	insertionPoint := file.GetInsertionPoint()
+	if name == "" && insertionPoint != "" {
+		// TODO: return error
+	}
+	// TODO: This isn't right, it's valid to have an empty name, we need to normalize the CodeGeneratorResponse.
+	normalizedName, err := validateAndNormalizePath("file", name)
+	if err != nil {
+		return err
+	}
+	if name != normalizedName {
+		if warningHandler != nil {
+			warningHandler(newUnnormalizedCodeGeneratorResponseFileNameError(name, normalizedName, true))
+			// We will coerce this into a normalized name if it is otherwise valid.
+			name = normalizedName
+			file.Name = proto.String(name)
+			return nil
+		}
+		return newUnnormalizedCodeGeneratorResponseFileNameError(name, normalizedName, false)
+	}
+	return nil
+}
+
 func validateFileDescriptorProto(fieldName string, fileDescriptorProto *descriptorpb.FileDescriptorProto) error {
 	if fileDescriptorProto == nil {
 		return fmt.Errorf("%s: nil", fieldName)
 	}
-	if err := validateProtoPath(fieldName+".name", fileDescriptorProto.GetName()); err != nil {
+	if err := validateAndCheckProtoPathIsNormalized(fieldName+".name", fileDescriptorProto.GetName()); err != nil {
 		return err
 	}
-	if err := validateProtoPaths(fieldName+".dependency", fileDescriptorProto.GetDependency()); err != nil {
+	if err := validateAndCheckProtoPathsAreNormalized(fieldName+".dependency", fileDescriptorProto.GetDependency()); err != nil {
 		return err
 	}
 	return nil
 }
 
-// validateProtoPaths validates with validateProtoPaths, and ensures that the paths are unique.
-func validateProtoPaths(fieldName string, paths []string) error {
+// validateAndCheckProtoPathsAreNormalized validates with validateProtoPaths, and ensures that the paths are unique.
+func validateAndCheckProtoPathsAreNormalized(fieldName string, paths []string) error {
 	pathMap := make(map[string]struct{}, len(paths))
 	for _, path := range paths {
-		if err := validateProtoPath(fieldName, path); err != nil {
+		if err := validateAndCheckProtoPathIsNormalized(fieldName, path); err != nil {
 			return err
 		}
 		if _, ok := pathMap[path]; ok {
@@ -162,31 +232,28 @@ func validateProtoPaths(fieldName string, paths []string) error {
 	return nil
 }
 
-// validateProtoPath validates that the path is non-empty, relative, uses '/' as the
+// validateAndCheckProtoPathIsNormalized validates that the path is non-empty, relative, uses '/' as the
 // path separator, is equal to filepath.ToSlash(filepath.Clean(path)),
 // and has .proto as the file extension.
-func validateProtoPath(fieldName string, path string) error {
-	if err := validateAndCheckNormalizedPath(path); err != nil {
-		return fmt.Errorf("%s: %w", fieldName, err)
+func validateAndCheckProtoPathIsNormalized(fieldName string, path string) error {
+	if err := validateAndCheckPathIsNormalized(fieldName, path); err != nil {
+		return err
 	}
 	if filepath.Ext(path) != ".proto" {
-		return fmt.Errorf("%s: expected path %q to have the .proto file extension", fieldName, path)
+		return fmt.Errorf("%s: path %q should have the .proto file extension", fieldName, path)
 	}
 	return nil
 }
 
-// validateAndCheckNormalizedPath validates that the path is non-empty, relative, and uses '/' as the
+// validateCheckPathIsNormalized validates that the path is non-empty, relative, and uses '/' as the
 // path separator, and is equal to filepath.ToSlash(filepath.Clean(path)).
-func validateAndCheckNormalizedPath(path string) error {
-	if path == "" {
-		return errors.New("expected path to be non-empty")
-	}
-	normalizedPath, err := validateAndNormalizePath(path)
+func validateAndCheckPathIsNormalized(fieldName string, path string) error {
+	normalizedPath, err := validateAndNormalizePath(fieldName, path)
 	if err != nil {
 		return err
 	}
 	if path != normalizedPath {
-		return fmt.Errorf("expected path %q to be given as %q", path, normalizedPath)
+		return fmt.Errorf("%s: path %q to be given as %q", fieldName, path, normalizedPath)
 	}
 	return nil
 }
@@ -194,17 +261,17 @@ func validateAndCheckNormalizedPath(path string) error {
 // validateAndNormalizePath validates that the path is non-empty, relative, and uses '/' as the
 // path separator, and returns filepath.ToSlash(filepath.Clean(path)). It does not
 // validate that the path is equal to the normalized value.
-func validateAndNormalizePath(path string) (string, error) {
+func validateAndNormalizePath(fieldName string, path string) (string, error) {
 	if path == "" {
-		return "", errors.New("expected path to be non-empty")
+		return "", fmt.Errorf("%s: path was empty", fieldName)
 	}
 	normalizedPath := filepath.ToSlash(filepath.Clean(path))
 	if filepath.IsAbs(normalizedPath) {
-		return "", fmt.Errorf("expected path %q to be relative", path)
+		return "", fmt.Errorf("%s: path %q should be relative", fieldName, normalizedPath)
 	}
 	// https://github.com/bufbuild/buf/issues/51
 	if strings.HasPrefix(normalizedPath, "../") {
-		return "", fmt.Errorf("expected path %q to not jump context", path)
+		return "", fmt.Errorf("%s: path %q should not jump context", fieldName, normalizedPath)
 	}
 	return normalizedPath, nil
 }
