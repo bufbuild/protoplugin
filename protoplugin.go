@@ -28,7 +28,17 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
-var interruptSignals = append([]os.Signal{os.Interrupt}, extraInterruptSignals...)
+var (
+	// OSEnv is the os-based Env used in Main.
+	OSEnv = Env{
+		Args:    os.Args[1:],
+		Environ: os.Environ(),
+		Stdin:   os.Stdin,
+		Stdout:  os.Stdout,
+		Stderr:  os.Stderr,
+	}
+	interruptSignals = append([]os.Signal{os.Interrupt}, extraInterruptSignals...)
+)
 
 // Main simplifies the authoring of main functions to invoke Handler.
 //
@@ -39,12 +49,12 @@ var interruptSignals = append([]os.Signal{os.Interrupt}, extraInterruptSignals..
 //	  protoplugin.Main(newHandler())
 //	}
 func Main(handler Handler, options ...MainOption) {
-	runOptions := newRunOptions()
+	opts := newOpts()
 	for _, option := range options {
-		option.applyMainOption(runOptions)
+		option.applyMainOption(opts)
 	}
 	ctx, cancel := withCancelInterruptSignal(context.Background())
-	if err := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, handler, runOptions); err != nil {
+	if err := run(ctx, OSEnv, handler, opts); err != nil {
 		exitError := &exec.ExitError{}
 		if errors.As(err, &exitError) {
 			cancel()
@@ -63,83 +73,113 @@ func Main(handler Handler, options ...MainOption) {
 // Run runs the plugin using the Handler for the given stdio.
 //
 // This is the function that Main calls to invoke Handlers. However, Run gives you control over
-// stdio, and does not provide additional functionality such as handling interrupts. Run is useful
+// the environment, and does not provide additional functionality such as handling interrupts. Run is useful
 // when writing plugin tests, or if you want to use your own custom logic for main functions.
-func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, handler Handler, options ...RunOption) error {
-	runOptions := newRunOptions()
+func Run(
+	ctx context.Context,
+	env Env,
+	handler Handler,
+	options ...RunOption,
+) error {
+	opts := newOpts()
 	for _, option := range options {
-		option.applyRunOption(runOptions)
+		option.applyRunOption(opts)
 	}
-	return run(ctx, args, stdin, stdout, stderr, handler, runOptions)
+	return run(ctx, env, handler, opts)
+}
+
+// Env represents an environment for a plugin to run within.
+//
+// This wraps items like args, environment variables, and stdio.
+//
+// When calling Main, this uses the values from the os package: os.Args[1:], os.Environ,
+// os.Stdin, os.Stdout, and os.Stderr.
+type Env struct {
+	// Args are the program arguments.
+	//
+	// Does not include the program name.
+	Args []string
+	// Environment are the environment variables.
+	Environ []string
+	// Stdin is the stdin for the plugin.
+	Stdin io.Reader
+	// Stdout is the stdout for the plugin.
+	Stdout io.Writer
+	// Stderr is the stderr for the plugin.
+	Stderr io.Writer
 }
 
 // MainOption is an option for Main.
-//
-// Note that MainOptions are also RunOptions, so all MainOptions can also be passed to Run.
 type MainOption interface {
-	RunOption
-
-	applyMainOption(runOptions *runOptions)
+	applyMainOption(opts *opts)
 }
 
-// WithWarningHandler returns a new MainOption that says to handle warnings with the given function.
-// This can be passed to either Main or to Run, as MainOptions are also RunOptions.
+// RunOption is an option for Run.
+//
+// Note that RunOptions are also MainOptions, so all RunOptions can also be passed to Main.
+type RunOption interface {
+	MainOption
+
+	applyRunOption(opts *opts)
+}
+
+// WithVersion returns a new RunOption that will result in the given version string being printed
+// to stdout if the plugin is given the --version flag.
+//
+// This can be passed to Main or Run,
+//
+// The default is no version flag is installed.
+func WithVersion(version string) RunOption {
+	return optsFunc(func(opts *opts) {
+		opts.version = version
+	})
+}
+
+// GenerateOption is an option for Generate.
+//
+// Note that GenerateOptions are also RunOptions, and therefore MainOptions, so all GenerateOptions
+// can also be passed to Run or Main.
+type GenerateOption interface {
+	RunOption
+
+	applyGenerateOption(opts *opts)
+}
+
+// WithWarningHandler returns a new GenerateOption that says to handle warnings with the given function.
+//
+// This can be passed to either Main, Run, or Generate.
 //
 // The default is to write warnings to stderr.
 //
 // Implementers of warningHandlerFunc can assume that errors passed will be non-nil and have non-empty
 // values for err.Error().
-func WithWarningHandler(warningHandlerFunc func(error)) MainOption {
-	return mainOptionsFunc(func(runOptions *runOptions) {
-		runOptions.warningHandlerFunc = warningHandlerFunc
+func WithWarningHandler(warningHandlerFunc func(error)) GenerateOption {
+	return optsFunc(func(opts *opts) {
+		opts.warningHandlerFunc = warningHandlerFunc
 	})
-}
-
-// WithVersion returns a new MainOption that will result in the given version string being printed
-// to stdout if the plugin is given the --version flag.
-//
-// The default is no version flag is installed.
-func WithVersion(version string) MainOption {
-	return mainOptionsFunc(func(runOptions *runOptions) {
-		runOptions.version = version
-	})
-}
-
-// RunOption is an option for Run.
-//
-// Note that MainOptions are also RunOptions, so all MainOptions can also be passed to Run.
-type RunOption interface {
-	applyRunOption(runOptions *runOptions)
 }
 
 /// *** PRIVATE ***
 
 func run(
 	ctx context.Context,
-	args []string,
-	stdin io.Reader,
-	stdout io.Writer,
-	stderr io.Writer,
+	env Env,
 	handler Handler,
-	runOptions *runOptions,
+	opts *opts,
 ) error {
-	switch len(args) {
+	switch len(env.Args) {
 	case 0:
 	case 1:
-		if runOptions.version != "" && args[0] == "--version" {
-			_, err := fmt.Fprintln(stdout, runOptions.version)
+		if opts.version != "" && env.Args[0] == "--version" {
+			_, err := fmt.Fprintln(env.Stdout, opts.version)
 			return err
 		}
-		return newUnknownArgumentsError(args)
+		return newUnknownArgumentsError(env.Args)
 	default:
-		return newUnknownArgumentsError(args)
+		return newUnknownArgumentsError(env.Args)
 	}
 
-	if runOptions.warningHandlerFunc == nil {
-		runOptions.warningHandlerFunc = func(err error) { _, _ = fmt.Fprintln(stderr, err.Error()) }
-	}
-
-	input, err := io.ReadAll(stdin)
+	input, err := io.ReadAll(env.Stdin)
 	if err != nil {
 		return err
 	}
@@ -147,15 +187,7 @@ func run(
 	if err := proto.Unmarshal(input, codeGeneratorRequest); err != nil {
 		return err
 	}
-	request, err := newRequest(codeGeneratorRequest)
-	if err != nil {
-		return err
-	}
-	responseWriter := newResponseWriter(runOptions.warningHandlerFunc)
-	if err := handler.Handle(ctx, responseWriter, request); err != nil {
-		return err
-	}
-	codeGeneratorResponse, err := responseWriter.toCodeGeneratorResponse()
+	codeGeneratorResponse, err := generate(ctx, env.Environ, env.Stderr, handler, codeGeneratorRequest, opts)
 	if err != nil {
 		return err
 	}
@@ -163,8 +195,31 @@ func run(
 	if err != nil {
 		return err
 	}
-	_, err = stdout.Write(data)
+	_, err = env.Stdout.Write(data)
 	return err
+}
+
+func generate(
+	ctx context.Context,
+	environ []string,
+	stderr io.Writer,
+	handler Handler,
+	codeGeneratorRequest *pluginpb.CodeGeneratorRequest,
+	opts *opts,
+) (*pluginpb.CodeGeneratorResponse, error) {
+	if opts.warningHandlerFunc == nil {
+		opts.warningHandlerFunc = func(err error) { _, _ = fmt.Fprintln(stderr, err.Error()) }
+	}
+
+	request, err := newRequest(codeGeneratorRequest)
+	if err != nil {
+		return nil, err
+	}
+	responseWriter := newResponseWriter(opts.warningHandlerFunc)
+	if err := handler.Handle(ctx, responseWriter, request); err != nil {
+		return nil, err
+	}
+	return responseWriter.toCodeGeneratorResponse()
 }
 
 // withCancelInterruptSignal returns a context that is cancelled if interrupt signals are sent.
@@ -191,21 +246,25 @@ func newInterruptSignalChannel() (<-chan os.Signal, func()) {
 	}
 }
 
-type runOptions struct {
+type opts struct {
 	warningHandlerFunc func(error)
 	version            string
 }
 
-func newRunOptions() *runOptions {
-	return &runOptions{}
+func newOpts() *opts {
+	return &opts{}
 }
 
-type mainOptionsFunc func(*runOptions)
+type optsFunc func(*opts)
 
-func (f mainOptionsFunc) applyMainOption(runOptions *runOptions) {
-	f(runOptions)
+func (f optsFunc) applyMainOption(opts *opts) {
+	f(opts)
 }
 
-func (f mainOptionsFunc) applyRunOption(runOptions *runOptions) {
-	f(runOptions)
+func (f optsFunc) applyRunOption(opts *opts) {
+	f(opts)
+}
+
+func (f optsFunc) applyGenerateOption(opts *opts) {
+	f(opts)
 }
