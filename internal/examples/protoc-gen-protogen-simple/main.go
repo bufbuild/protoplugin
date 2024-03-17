@@ -36,9 +36,9 @@ func main() {
 
 func handle(
 	_ context.Context,
-	_ *protoplugin.HandlerEnv,
-	responseWriter *protoplugin.ResponseWriter,
-	request *protoplugin.Request,
+	_ protoplugin.PluginEnv,
+	responseWriter protoplugin.ResponseWriter,
+	request protoplugin.Request,
 ) error {
 	plugin, err := protogen.Options{}.New(request.CodeGeneratorRequest())
 	if err != nil {

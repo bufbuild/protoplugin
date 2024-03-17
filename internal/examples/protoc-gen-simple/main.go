@@ -34,9 +34,9 @@ func main() {
 
 func handle(
 	_ context.Context,
-	_ *protoplugin.HandlerEnv,
-	responseWriter *protoplugin.ResponseWriter,
-	request *protoplugin.Request,
+	_ protoplugin.PluginEnv,
+	responseWriter protoplugin.ResponseWriter,
+	request protoplugin.Request,
 ) error {
 	// Set the flag indicating that we support proto3 optionals. We don't even use them in this
 	// plugin, but protoc will error if it encounters a proto3 file with an optional but the
