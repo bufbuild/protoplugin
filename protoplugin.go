@@ -70,7 +70,7 @@ func Main(handler Handler, options ...MainOption) {
 	cancel()
 }
 
-// Run runs the plugin using the Handler for the given stdio.
+// Run runs the plugin using the Handler for the given environment.
 //
 // This is the function that Main calls to invoke Handlers. However, Run gives you control over
 // the environment, and does not provide additional functionality such as handling interrupts. Run is useful
@@ -88,25 +88,26 @@ func Run(
 	return run(ctx, env, handler, opts)
 }
 
-// Env represents an environment for a plugin to run within.
+// Generate runs generation using the Handler for the given environment.
 //
-// This wraps items like args, environment variables, and stdio.
+// This is the function that Run calls to invoke Handlers. However, this assumes you have
+// already constructed a CodeGeneratorRequest, and will handle the CodeGeneratorResponse yourself.
 //
-// When calling Main, this uses the values from the os package: os.Args[1:], os.Environ,
-// os.Stdin, os.Stdout, and os.Stderr.
-type Env struct {
-	// Args are the program arguments.
-	//
-	// Does not include the program name.
-	Args []string
-	// Environment are the environment variables.
-	Environ []string
-	// Stdin is the stdin for the plugin.
-	Stdin io.Reader
-	// Stdout is the stdout for the plugin.
-	Stdout io.Writer
-	// Stderr is the stderr for the plugin.
-	Stderr io.Writer
+// Most users of this library will use Main or Run, however this gives even more control over
+// how requests and responses are handled, primary for the buf CLI, while continuing to ensure
+// validation of the request and responses.
+func Generate(
+	ctx context.Context,
+	handlerEnv *HandlerEnv,
+	codeGeneratorRequest *pluginpb.CodeGeneratorRequest,
+	handler Handler,
+	options ...GenerateOption,
+) (*pluginpb.CodeGeneratorResponse, error) {
+	opts := newOpts()
+	for _, option := range options {
+		option.applyGenerateOption(opts)
+	}
+	return generate(ctx, handlerEnv, codeGeneratorRequest, handler, opts)
 }
 
 // MainOption is an option for Main.
@@ -204,7 +205,16 @@ func run(
 	if err := proto.Unmarshal(input, codeGeneratorRequest); err != nil {
 		return err
 	}
-	codeGeneratorResponse, err := generate(ctx, env.Environ, env.Stderr, handler, codeGeneratorRequest, opts)
+	codeGeneratorResponse, err := generate(
+		ctx,
+		&HandlerEnv{
+			Environ: env.Environ,
+			Stderr:  env.Stderr,
+		},
+		codeGeneratorRequest,
+		handler,
+		opts,
+	)
 	if err != nil {
 		return err
 	}
@@ -218,10 +228,9 @@ func run(
 
 func generate(
 	ctx context.Context,
-	environ []string,
-	stderr io.Writer,
-	handler Handler,
+	handlerEnv *HandlerEnv,
 	codeGeneratorRequest *pluginpb.CodeGeneratorRequest,
+	handler Handler,
 	opts *opts,
 ) (*pluginpb.CodeGeneratorResponse, error) {
 	request, err := newRequest(codeGeneratorRequest)
@@ -229,7 +238,7 @@ func generate(
 		return nil, err
 	}
 	responseWriter := newResponseWriter(opts.lenientResponseValidateErrorFunc)
-	if err := handler.Handle(ctx, &HandlerEnv{Environ: environ, Stderr: stderr}, responseWriter, request); err != nil {
+	if err := handler.Handle(ctx, handlerEnv, responseWriter, request); err != nil {
 		return nil, err
 	}
 	return responseWriter.toCodeGeneratorResponse()
