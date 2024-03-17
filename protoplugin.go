@@ -88,28 +88,6 @@ func Run(
 	return run(ctx, env, handler, opts)
 }
 
-// Generate runs generation using the Handler for the given environment.
-//
-// This is the function that Run calls to invoke Handlers. However, this assumes you have
-// already constructed a CodeGeneratorRequest, and will handle the CodeGeneratorResponse yourself.
-//
-// Most users of this library will use Main or Run, however this gives even more control over
-// how requests and responses are handled, primary for the buf CLI, while continuing to ensure
-// validation of the request and responses.
-func Generate(
-	ctx context.Context,
-	handlerEnv *HandlerEnv,
-	codeGeneratorRequest *pluginpb.CodeGeneratorRequest,
-	handler Handler,
-	options ...GenerateOption,
-) (*pluginpb.CodeGeneratorResponse, error) {
-	opts := newOpts()
-	for _, option := range options {
-		option.applyGenerateOption(opts)
-	}
-	return generate(ctx, handlerEnv, codeGeneratorRequest, handler, opts)
-}
-
 // MainOption is an option for Main.
 type MainOption interface {
 	applyMainOption(opts *opts)
@@ -127,23 +105,13 @@ type RunOption interface {
 // WithVersion returns a new RunOption that will result in the given version string being printed
 // to stdout if the plugin is given the --version flag.
 //
-// This can be passed to Main or Run,
+// This can be passed to Main or Run.
 //
 // The default is no version flag is installed.
 func WithVersion(version string) RunOption {
 	return optsFunc(func(opts *opts) {
 		opts.version = version
 	})
-}
-
-// GenerateOption is an option for Generate.
-//
-// Note that GenerateOptions are also RunOptions, and therefore MainOptions, so all GenerateOptions
-// can also be passed to Run or Main.
-type GenerateOption interface {
-	RunOption
-
-	applyGenerateOption(opts *opts)
 }
 
 // WithLenientResponseValidation returns a new GenerateOption that says handle non-critical issues with response
@@ -165,13 +133,13 @@ type GenerateOption interface {
 // Most users of protoplugin should not use this option, this should only be used for plugins that proxy to other
 // plugins. If you are authoring a standalone plugin, you should instead make sure your responses are completely correct.
 //
-// This option can be passed to any of Main, Run, or Generate.
+// This option can be passed to Main or Run.
 //
 // The default is to error on these issues.
 //
 // Implementers of lenientResponseValidationErrorFunc can assume that errors passed will be non-nil and have non-empty
 // values for err.Error().
-func WithLenientResponseValidation(lenientResponseValidateErrorFunc func(error)) GenerateOption {
+func WithLenientResponseValidation(lenientResponseValidateErrorFunc func(error)) RunOption {
 	return optsFunc(func(opts *opts) {
 		opts.lenientResponseValidateErrorFunc = lenientResponseValidateErrorFunc
 	})
@@ -284,9 +252,5 @@ func (f optsFunc) applyMainOption(opts *opts) {
 }
 
 func (f optsFunc) applyRunOption(opts *opts) {
-	f(opts)
-}
-
-func (f optsFunc) applyGenerateOption(opts *opts) {
 	f(opts)
 }
