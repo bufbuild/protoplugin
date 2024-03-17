@@ -77,6 +77,7 @@ func main() {
 
 func handle(
 	_ context.Context,
+  _ *protoplugin.HandlerEnv,
 	responseWriter *protoplugin.ResponseWriter,
 	request *protoplugin.Request,
 ) error {
@@ -185,15 +186,14 @@ For most authors, however, you should use the common methods.
 
 If any of these validations fail, the plugin will exit with a non-zero exit code.
 
-A warning will also be produced if:
+Errors or warnings will also be produced if:
 
 - Files do not have unique names. `protoc` will continue on without erroring if this happens, but will just
   silently drop all occurrences of the file after the name has already been seen. In almost all cases,
   a duplicate name is plugin authoring issue, and here at Buf, we've seen a lot of plugins have this issue!
 - Any file path is not cleaned.
 
-By default, warnings are produced to `stderr`, however this can be overridden via the `WithWarningHandler`
-option to `Main` or `Run`.
+By default, these are errors, however if `WithLenientResponseValidation` is set, these will be warnings.
 
 ## What this library is not
 

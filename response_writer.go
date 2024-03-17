@@ -16,8 +16,6 @@ package protoplugin
 
 import (
 	"errors"
-	"fmt"
-	"strconv"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
@@ -25,24 +23,14 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
-const allSupportedFeaturesMask = uint64(
-	pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL |
-		pluginpb.CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS,
-)
-
 // ResponseWriter is used by implementations of Handler to construct CodeGeneratorResponses.
 type ResponseWriter struct {
-	warningHandlerFunc func(error)
+	codeGeneratorResponse *pluginpb.CodeGeneratorResponse
+	written               bool
 
-	responseFileNames         map[string]struct{}
-	responseFiles             []*pluginpb.CodeGeneratorResponse_File
-	responseErrorMessage      string
-	responseSupportedFeatures uint64
-	responseMinimumEdition    uint32
-	responseMaximumEdition    uint32
+	lenientResponseValidateErrorFunc func(error)
 
-	systemErrors []error
-	lock         sync.RWMutex
+	lock sync.RWMutex
 }
 
 // AddFile adds the file with the given content to the response.
@@ -81,7 +69,7 @@ func (r *ResponseWriter) SetError(message string) {
 	if message == "" {
 		return
 	}
-	r.responseErrorMessage = message
+	r.codeGeneratorResponse.Error = proto.String(message)
 }
 
 // SetFeatureProto3Optional sets the FEATURE_PROTO3_OPTIONAL feature on the response.
@@ -103,8 +91,8 @@ func (r *ResponseWriter) SetFeatureSupportsEditions(
 	maximumEdition descriptorpb.Edition,
 ) {
 	r.addSupportedFeatures(uint64(pluginpb.CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS))
-	r.SetMinimumEdition(uint32(minimumEdition))
-	r.SetMaximumEdition(uint32(maximumEdition))
+	r.SetMinimumEdition(int32(minimumEdition))
+	r.SetMaximumEdition(int32(maximumEdition))
 }
 
 // AddCodeGeneratorResponseFiles adds the CodeGeneratorResponse.Files to the response.
@@ -125,34 +113,10 @@ func (r *ResponseWriter) AddCodeGeneratorResponseFiles(files ...*pluginpb.CodeGe
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	for _, file := range files {
-		name := file.GetName()
-		if name == "" {
-			r.addSystemError(fmt.Errorf("CodeGeneratorResponse.File: name: empty"))
-			return
-		}
-		normalizedName, err := validateAndNormalizePath(name)
-		if err != nil {
-			r.addSystemError(fmt.Errorf("CodeGeneratorResponse.File: %w", err))
-			return
-		}
-		if normalizedName != name {
-			r.warnUnnormalizedName(name, normalizedName)
-			// We will coerce this into a normalized name if it is valid via normalizePath.
-			name = normalizedName
-			file.Name = proto.String(name)
-		}
-
-		if r.isDuplicate(file) {
-			r.warnDuplicateName(name)
-			return
-		}
-		r.responseFileNames[name] = struct{}{}
-		r.responseFiles = append(r.responseFiles, file)
-	}
+	r.codeGeneratorResponse.File = append(r.codeGeneratorResponse.GetFile(), files...)
 }
 
-// SetSupportedFeaturessets the given features on the response.
+// SetSupportedFeatures the given features on the response.
 //
 // You likely want to use the specific feature functions instead of this function.
 // This function is for lower-level access.
@@ -165,11 +129,11 @@ func (r *ResponseWriter) SetSupportedFeatures(supportedFeatures uint64) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	if supportedFeatures|allSupportedFeaturesMask != allSupportedFeaturesMask {
-		r.addSystemError(fmt.Errorf("specified supported features contains unknown CodeGeneratorResponse.Features: %s", strconv.FormatUint(supportedFeatures, 2)))
-		return
+	if supportedFeatures == 0 {
+		r.codeGeneratorResponse.SupportedFeatures = nil
+	} else {
+		r.codeGeneratorResponse.SupportedFeatures = proto.Uint64(supportedFeatures)
 	}
-	r.responseSupportedFeatures = supportedFeatures
 }
 
 // SetMinimumEdition sets the minimum edition.
@@ -178,8 +142,11 @@ func (r *ResponseWriter) SetSupportedFeatures(supportedFeatures uint64) {
 // SetFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
 //
 // The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
-func (r *ResponseWriter) SetMinimumEdition(minimumEdition uint32) {
-	r.responseMinimumEdition = minimumEdition
+func (r *ResponseWriter) SetMinimumEdition(minimumEdition int32) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.codeGeneratorResponse.MinimumEdition = proto.Int32(minimumEdition)
 }
 
 // SetMaximumEdition sets the maximum edition.
@@ -188,16 +155,19 @@ func (r *ResponseWriter) SetMinimumEdition(minimumEdition uint32) {
 // SetFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
 //
 // The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
-func (r *ResponseWriter) SetMaximumEdition(maximumEdition uint32) {
-	r.responseMaximumEdition = maximumEdition
+func (r *ResponseWriter) SetMaximumEdition(maximumEdition int32) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.codeGeneratorResponse.MaximumEdition = proto.Int32(maximumEdition)
 }
 
 // *** PRIVATE ***
 
-func newResponseWriter(warningHandlerFunc func(error)) *ResponseWriter {
+func newResponseWriter(lenientResponseValidateErrorFunc func(error)) *ResponseWriter {
 	return &ResponseWriter{
-		warningHandlerFunc: warningHandlerFunc,
-		responseFileNames:  make(map[string]struct{}),
+		codeGeneratorResponse:            &pluginpb.CodeGeneratorResponse{},
+		lenientResponseValidateErrorFunc: lenientResponseValidateErrorFunc,
 	}
 }
 
@@ -205,87 +175,24 @@ func (r *ResponseWriter) addSupportedFeatures(supportedFeatures uint64) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	if supportedFeatures|allSupportedFeaturesMask != allSupportedFeaturesMask {
-		r.addSystemError(fmt.Errorf("specified supported features contains unknown CodeGeneratorResponse.Features: %s", strconv.FormatUint(supportedFeatures, 2)))
-		return
-	}
-	r.responseSupportedFeatures |= supportedFeatures
+	r.codeGeneratorResponse.SupportedFeatures = proto.Uint64(r.codeGeneratorResponse.GetSupportedFeatures() | supportedFeatures)
 }
 
 func (r *ResponseWriter) toCodeGeneratorResponse() (*pluginpb.CodeGeneratorResponse, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	if r.responseSupportedFeatures&uint64(pluginpb.CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS) != 0 {
-		if r.responseMinimumEdition == 0 {
-			r.addSystemError(
-				errors.New("CodeGeneratorResponse: FEATURE_SUPPORTS_EDITIONS specified but no minimum_edition set"),
-			)
-		}
-		if r.responseMaximumEdition == 0 {
-			r.addSystemError(
-				errors.New("CodeGeneratorResponse: FEATURE_SUPPORTS_EDITIONS specified but no maximum_edition set"),
-			)
-		}
-		if r.responseMinimumEdition > r.responseMaximumEdition {
-			r.addSystemError(
-				fmt.Errorf(
-					"CodeGeneratorResponse: minimum_edition %d is greater than maximum_edition %d",
-					r.responseMinimumEdition,
-					r.responseMaximumEdition,
-				),
-			)
-		}
+	if r.written {
+		// We do modifications of the CodeGeneratorResponse in validateAndNormalizeCodeGeneratorResponse, so if someone were
+		// to somehow reuse a ResponseWriter, they may get unexpected results in the future.
+		//
+		// This is an edge case - ResponseWriters are given to Handlers, so to reuse one would be very weird.
+		return nil, errors.New("ResponseWriter cannot be reused")
 	}
+	r.written = true
 
-	if len(r.systemErrors) > 0 {
-		return nil, errors.Join(r.systemErrors...)
+	if err := validateAndNormalizeCodeGeneratorResponse(r.codeGeneratorResponse, r.lenientResponseValidateErrorFunc); err != nil {
+		return nil, err
 	}
-	response := &pluginpb.CodeGeneratorResponse{
-		File: r.responseFiles,
-	}
-	if r.responseErrorMessage != "" {
-		response.Error = proto.String(r.responseErrorMessage)
-	}
-	if r.responseSupportedFeatures != 0 {
-		response.SupportedFeatures = proto.Uint64(r.responseSupportedFeatures)
-	}
-	return response, nil
-}
-
-// isDuplicate determines if the given file is a duplicate file.
-// Insertion points are intentionally ignored because they must
-// always reference duplicate files in order to take effect.
-//
-// Note that we do not acquire the lock here because this helper
-// is only called within the context of r.AddFile.
-func (r *ResponseWriter) isDuplicate(file *pluginpb.CodeGeneratorResponse_File) bool {
-	if file.GetInsertionPoint() != "" {
-		return false
-	}
-	_, ok := r.responseFileNames[file.GetName()]
-	return ok
-}
-
-func (r *ResponseWriter) warnUnnormalizedName(name string, expectedName string) {
-	r.warnf(newUnvalidatedNameError(fmt.Errorf("expected %q to equal %q", name, expectedName)).Error())
-}
-
-func (r *ResponseWriter) warnDuplicateName(name string) {
-	r.warnf(`Duplicate generated file name %q. Generation will continue without error here and drop the second occurrence of this file, but please raise an issue with the maintainer of the plugin.`, name)
-}
-
-func (r *ResponseWriter) warnf(message string, args ...any) {
-	r.warningHandlerFunc(fmt.Errorf("Warning: "+message, args...))
-}
-
-func (r *ResponseWriter) addSystemError(err error) {
-	r.systemErrors = append(r.systemErrors, err)
-}
-
-func newUnvalidatedNameError(err error) error {
-	return fmt.Errorf(
-		`file name does not conform to the Protobuf generation specification. Note that the file name must be non-empty, relative, use "/" instead of "\" as the path separator, and not use "." or ".." as part of the file name. Generation will continue without error here, but please raise an issue with the maintainer of the plugin and reference https://github.com/protocolbuffers/protobuf/blob/95e6c5b4746dd7474d540ce4fb375e3f79a086f8/src/google/protobuf/compiler/plugin.proto#L122: %w`,
-		err,
-	)
+	return r.codeGeneratorResponse, nil
 }

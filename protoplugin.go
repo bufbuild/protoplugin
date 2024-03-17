@@ -23,13 +23,22 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"strings"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
-var interruptSignals = append([]os.Signal{os.Interrupt}, extraInterruptSignals...)
+var (
+	// osEnv is the os-based Env used in Main.
+	osEnv = &Env{
+		Args:    os.Args[1:],
+		Environ: os.Environ(),
+		Stdin:   os.Stdin,
+		Stdout:  os.Stdout,
+		Stderr:  os.Stderr,
+	}
+	interruptSignals = append([]os.Signal{os.Interrupt}, extraInterruptSignals...)
+)
 
 // Main simplifies the authoring of main functions to invoke Handler.
 //
@@ -40,12 +49,12 @@ var interruptSignals = append([]os.Signal{os.Interrupt}, extraInterruptSignals..
 //	  protoplugin.Main(newHandler())
 //	}
 func Main(handler Handler, options ...MainOption) {
-	runOptions := newRunOptions()
+	opts := newOpts()
 	for _, option := range options {
-		option.applyMainOption(runOptions)
+		option.applyMainOption(opts)
 	}
 	ctx, cancel := withCancelInterruptSignal(context.Background())
-	if err := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, handler, runOptions); err != nil {
+	if err := run(ctx, osEnv, handler, opts); err != nil {
 		exitError := &exec.ExitError{}
 		if errors.As(err, &exitError) {
 			cancel()
@@ -64,83 +73,130 @@ func Main(handler Handler, options ...MainOption) {
 // Run runs the plugin using the Handler for the given stdio.
 //
 // This is the function that Main calls to invoke Handlers. However, Run gives you control over
-// stdio, and does not provide additional functionality such as handling interrupts. Run is useful
+// the environment, and does not provide additional functionality such as handling interrupts. Run is useful
 // when writing plugin tests, or if you want to use your own custom logic for main functions.
-func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, handler Handler, options ...RunOption) error {
-	runOptions := newRunOptions()
+func Run(
+	ctx context.Context,
+	env *Env,
+	handler Handler,
+	options ...RunOption,
+) error {
+	opts := newOpts()
 	for _, option := range options {
-		option.applyRunOption(runOptions)
+		option.applyRunOption(opts)
 	}
-	return run(ctx, args, stdin, stdout, stderr, handler, runOptions)
+	return run(ctx, env, handler, opts)
+}
+
+// Env represents an environment for a plugin to run within.
+//
+// This wraps items like args, environment variables, and stdio.
+//
+// When calling Main, this uses the values from the os package: os.Args[1:], os.Environ,
+// os.Stdin, os.Stdout, and os.Stderr.
+type Env struct {
+	// Args are the program arguments.
+	//
+	// Does not include the program name.
+	Args []string
+	// Environment are the environment variables.
+	Environ []string
+	// Stdin is the stdin for the plugin.
+	Stdin io.Reader
+	// Stdout is the stdout for the plugin.
+	Stdout io.Writer
+	// Stderr is the stderr for the plugin.
+	Stderr io.Writer
 }
 
 // MainOption is an option for Main.
-//
-// Note that MainOptions are also RunOptions, so all MainOptions can also be passed to Run.
 type MainOption interface {
-	RunOption
-
-	applyMainOption(runOptions *runOptions)
-}
-
-// WithWarningHandler returns a new MainOption that says to handle warnings with the given function.
-// This can be passed to either Main or to Run, as MainOptions are also RunOptions.
-//
-// The default is to write warnings to stderr.
-//
-// Implementers of warningHandlerFunc can assume that errors passed will be non-nil and have non-empty
-// values for err.Error().
-func WithWarningHandler(warningHandlerFunc func(error)) MainOption {
-	return mainOptionsFunc(func(runOptions *runOptions) {
-		runOptions.warningHandlerFunc = warningHandlerFunc
-	})
-}
-
-// WithVersion returns a new MainOption that will result in the given version string being printed
-// to stdout if the plugin is given the --version flag.
-//
-// The default is no version flag is installed.
-func WithVersion(version string) MainOption {
-	return mainOptionsFunc(func(runOptions *runOptions) {
-		runOptions.version = version
-	})
+	applyMainOption(opts *opts)
 }
 
 // RunOption is an option for Run.
 //
-// Note that MainOptions are also RunOptions, so all MainOptions can also be passed to Run.
+// Note that RunOptions are also MainOptions, so all RunOptions can also be passed to Main.
 type RunOption interface {
-	applyRunOption(runOptions *runOptions)
+	MainOption
+
+	applyRunOption(opts *opts)
+}
+
+// WithVersion returns a new RunOption that will result in the given version string being printed
+// to stdout if the plugin is given the --version flag.
+//
+// This can be passed to Main or Run,
+//
+// The default is no version flag is installed.
+func WithVersion(version string) RunOption {
+	return optsFunc(func(opts *opts) {
+		opts.version = version
+	})
+}
+
+// GenerateOption is an option for Generate.
+//
+// Note that GenerateOptions are also RunOptions, and therefore MainOptions, so all GenerateOptions
+// can also be passed to Run or Main.
+type GenerateOption interface {
+	RunOption
+
+	applyGenerateOption(opts *opts)
+}
+
+// WithLenientResponseValidation returns a new GenerateOption that says handle non-critical issues with response
+// construction as warnings that will be handled by the given warning handler.
+//
+// This allows the following issues to result in warnings instead of errors:
+//
+//   - Duplicate file names for files without insertion points. If the same file name is used two or more times for
+//     files without insertion points, the first occurrence of the file will be used and subsequent occurrences will
+//     be dropped.
+//   - File names that are not equal to filepath.ToSlash(filepath.Clean(name)). The file name will be modified
+//     with this normalization.
+//
+// These issues result in CodeGeneratorResponses that are not properly formed per the CodeGeneratorResponse
+// spec, however both protoc and buf have been resilient to these issues for years. There are numerous plugins
+// out in the wild that have these issues, and protoplugin should be able to function as a proxy to these
+// plugins without error.
+//
+// Most users of protoplugin should not use this option, this should only be used for plugins that proxy to other
+// plugins. If you are authoring a standalone plugin, you should instead make sure your responses are completely correct.
+//
+// This option can be passed to any of Main, Run, or Generate.
+//
+// The default is to error on these issues.
+//
+// Implementers of lenientResponseValidationErrorFunc can assume that errors passed will be non-nil and have non-empty
+// values for err.Error().
+func WithLenientResponseValidation(lenientResponseValidateErrorFunc func(error)) GenerateOption {
+	return optsFunc(func(opts *opts) {
+		opts.lenientResponseValidateErrorFunc = lenientResponseValidateErrorFunc
+	})
 }
 
 /// *** PRIVATE ***
 
 func run(
 	ctx context.Context,
-	args []string,
-	stdin io.Reader,
-	stdout io.Writer,
-	stderr io.Writer,
+	env *Env,
 	handler Handler,
-	runOptions *runOptions,
+	opts *opts,
 ) error {
-	switch len(args) {
+	switch len(env.Args) {
 	case 0:
 	case 1:
-		if runOptions.version != "" && args[0] == "--version" {
-			_, err := fmt.Fprintln(stdout, runOptions.version)
+		if opts.version != "" && env.Args[0] == "--version" {
+			_, err := fmt.Fprintln(env.Stdout, opts.version)
 			return err
 		}
-		return newUnknownArgumentsError(args)
+		return newUnknownArgumentsError(env.Args)
 	default:
-		return newUnknownArgumentsError(args)
+		return newUnknownArgumentsError(env.Args)
 	}
 
-	if runOptions.warningHandlerFunc == nil {
-		runOptions.warningHandlerFunc = func(err error) { _, _ = fmt.Fprintln(stderr, err.Error()) }
-	}
-
-	input, err := io.ReadAll(stdin)
+	input, err := io.ReadAll(env.Stdin)
 	if err != nil {
 		return err
 	}
@@ -148,15 +204,7 @@ func run(
 	if err := proto.Unmarshal(input, codeGeneratorRequest); err != nil {
 		return err
 	}
-	request, err := newRequest(codeGeneratorRequest)
-	if err != nil {
-		return err
-	}
-	responseWriter := newResponseWriter(runOptions.warningHandlerFunc)
-	if err := handler.Handle(ctx, responseWriter, request); err != nil {
-		return err
-	}
-	codeGeneratorResponse, err := responseWriter.toCodeGeneratorResponse()
+	codeGeneratorResponse, err := generate(ctx, env.Environ, env.Stderr, handler, codeGeneratorRequest, opts)
 	if err != nil {
 		return err
 	}
@@ -164,8 +212,27 @@ func run(
 	if err != nil {
 		return err
 	}
-	_, err = stdout.Write(data)
+	_, err = env.Stdout.Write(data)
 	return err
+}
+
+func generate(
+	ctx context.Context,
+	environ []string,
+	stderr io.Writer,
+	handler Handler,
+	codeGeneratorRequest *pluginpb.CodeGeneratorRequest,
+	opts *opts,
+) (*pluginpb.CodeGeneratorResponse, error) {
+	request, err := newRequest(codeGeneratorRequest)
+	if err != nil {
+		return nil, err
+	}
+	responseWriter := newResponseWriter(opts.lenientResponseValidateErrorFunc)
+	if err := handler.Handle(ctx, &HandlerEnv{Environ: environ, Stderr: stderr}, responseWriter, request); err != nil {
+		return nil, err
+	}
+	return responseWriter.toCodeGeneratorResponse()
 }
 
 // withCancelInterruptSignal returns a context that is cancelled if interrupt signals are sent.
@@ -192,36 +259,25 @@ func newInterruptSignalChannel() (<-chan os.Signal, func()) {
 	}
 }
 
-type runOptions struct {
-	warningHandlerFunc func(error)
-	version            string
+type opts struct {
+	version                          string
+	lenientResponseValidateErrorFunc func(error)
 }
 
-func newRunOptions() *runOptions {
-	return &runOptions{}
+func newOpts() *opts {
+	return &opts{}
 }
 
-type mainOptionsFunc func(*runOptions)
+type optsFunc func(*opts)
 
-func (f mainOptionsFunc) applyMainOption(runOptions *runOptions) {
-	f(runOptions)
+func (f optsFunc) applyMainOption(opts *opts) {
+	f(opts)
 }
 
-func (f mainOptionsFunc) applyRunOption(runOptions *runOptions) {
-	f(runOptions)
+func (f optsFunc) applyRunOption(opts *opts) {
+	f(opts)
 }
 
-type unknownArgumentsError struct {
-	args []string
-}
-
-func newUnknownArgumentsError(args []string) error {
-	return &unknownArgumentsError{args: args}
-}
-
-func (e *unknownArgumentsError) Error() string {
-	if len(e.args) == 1 {
-		return fmt.Sprintf("unknown argument: %s", e.args[0])
-	}
-	return fmt.Sprintf("unknown arguments: %s", strings.Join(e.args, " "))
+func (f optsFunc) applyGenerateOption(opts *opts) {
+	f(opts)
 }

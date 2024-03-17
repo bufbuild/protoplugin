@@ -47,6 +47,7 @@ func TestBasic(t *testing.T) {
 		HandlerFunc(
 			func(
 				ctx context.Context,
+				handlerEnv *HandlerEnv,
 				responseWriter *ResponseWriter,
 				request *Request,
 			) error {
@@ -76,11 +77,14 @@ func TestWithVersionOption(t *testing.T) {
 		stdout := bytes.NewBuffer(nil)
 		err := Run(
 			context.Background(),
-			args,
-			iotest.ErrReader(io.EOF),
-			stdout,
-			io.Discard,
-			HandlerFunc(func(ctx context.Context, w *ResponseWriter, r *Request) error { return nil }),
+			&Env{
+				Args:    args,
+				Environ: nil,
+				Stdin:   iotest.ErrReader(io.EOF),
+				Stdout:  stdout,
+				Stderr:  io.Discard,
+			},
+			HandlerFunc(func(ctx context.Context, _ *HandlerEnv, _ *ResponseWriter, _ *Request) error { return nil }),
 			runOptions...,
 		)
 		return stdout.String(), err
@@ -125,10 +129,13 @@ func testBasic(
 
 	err = Run(
 		ctx,
-		nil,
-		stdin,
-		stdout,
-		io.Discard,
+		&Env{
+			Args:    nil,
+			Environ: nil,
+			Stdin:   stdin,
+			Stdout:  stdout,
+			Stderr:  io.Discard,
+		},
 		handler,
 	)
 	require.NoError(t, err)

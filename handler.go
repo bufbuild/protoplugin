@@ -16,6 +16,7 @@ package protoplugin
 
 import (
 	"context"
+	"io"
 )
 
 // Handler is the interface implemented by protoc plugin implementations.
@@ -44,15 +45,34 @@ type Handler interface {
 	// (for example, a missing option), this error should be added to the response via SetError.
 	Handle(
 		ctx context.Context,
+		handlerEnv *HandlerEnv,
 		responseWriter *ResponseWriter,
 		request *Request,
 	) error
 }
 
 // HandlerFunc is a function that implements Handler.
-type HandlerFunc func(context.Context, *ResponseWriter, *Request) error
+type HandlerFunc func(context.Context, *HandlerEnv, *ResponseWriter, *Request) error
 
 // Handle implements Handler.
-func (h HandlerFunc) Handle(ctx context.Context, responseWriter *ResponseWriter, request *Request) error {
-	return h(ctx, responseWriter, request)
+func (h HandlerFunc) Handle(
+	ctx context.Context,
+	handlerEnv *HandlerEnv,
+	responseWriter *ResponseWriter,
+	request *Request,
+) error {
+	return h(ctx, handlerEnv, responseWriter, request)
+}
+
+// HandlerEnv represents an environment that a Handler is run within.
+//
+// This provides the environment variables and stderr to a Handler. A Handler should not have
+// access to stdin, stdout, or the args, as these are controlled by the plugin framework.
+//
+// When calling Main, this uses the values os.Environ and os.Stderr.
+type HandlerEnv struct {
+	// Environment are the environment variables.
+	Environ []string
+	// Stderr is the stderr for the plugin.
+	Stderr io.Writer
 }

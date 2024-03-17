@@ -58,3 +58,9 @@ issues:
     - linters:
       - protogetter
       path: protoplugin_test.go
+    - linters:
+      - protogetter
+      path: validate.go
+    - linters:
+      - nestif
+      path: validate.go

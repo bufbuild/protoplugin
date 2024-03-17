@@ -36,6 +36,7 @@ func main() {
 
 func handle(
 	_ context.Context,
+	_ *protoplugin.HandlerEnv,
 	responseWriter *protoplugin.ResponseWriter,
 	request *protoplugin.Request,
 ) error {
