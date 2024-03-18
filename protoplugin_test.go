@@ -47,9 +47,9 @@ func TestBasic(t *testing.T) {
 		HandlerFunc(
 			func(
 				ctx context.Context,
-				handlerEnv *HandlerEnv,
-				responseWriter *ResponseWriter,
-				request *Request,
+				pluginEnv PluginEnv,
+				responseWriter ResponseWriter,
+				request Request,
 			) error {
 				for _, fileDescriptorProto := range request.FileDescriptorProtosToGenerate() {
 					topLevelMessageNames := make([]string, len(fileDescriptorProto.GetMessageType()))
@@ -77,14 +77,14 @@ func TestWithVersionOption(t *testing.T) {
 		stdout := bytes.NewBuffer(nil)
 		err := Run(
 			context.Background(),
-			&Env{
+			Env{
 				Args:    args,
 				Environ: nil,
 				Stdin:   iotest.ErrReader(io.EOF),
 				Stdout:  stdout,
 				Stderr:  io.Discard,
 			},
-			HandlerFunc(func(ctx context.Context, _ *HandlerEnv, _ *ResponseWriter, _ *Request) error { return nil }),
+			HandlerFunc(func(ctx context.Context, _ PluginEnv, _ ResponseWriter, _ Request) error { return nil }),
 			runOptions...,
 		)
 		return stdout.String(), err
@@ -129,7 +129,7 @@ func testBasic(
 
 	err = Run(
 		ctx,
-		&Env{
+		Env{
 			Args:    nil,
 			Environ: nil,
 			Stdin:   stdin,

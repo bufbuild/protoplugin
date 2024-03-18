@@ -24,25 +24,146 @@ import (
 )
 
 // ResponseWriter is used by implementations of Handler to construct CodeGeneratorResponses.
-type ResponseWriter struct {
+//
+// ResponseWriter contains a private method to ensure that it is not constructed outside this package, to
+// enable us to modify the ResponseWriter interface in the future without breaking compatibility.
+type ResponseWriter interface {
+	// AddFile adds the file with the given content to the response.
+	//
+	// This takes care of the most common case of adding a CodeGeneratorResponse.File with content. If you need add a
+	// CodeGeneratorResponse.File with insertion points or any other feature, use AddCodeGeneratorResponseFiles.
+	//
+	// The plugin will exit with a non-zero exit code if the name is an invalid path.
+	// Paths are considered valid if they are non-empty, relative, use '/' as the path separator, and do not jump context.
+	//
+	// If a file with the same name was already added, or the file name is not cleaned, a warning will be produced.
+	AddFile(name string, content string)
+	// SetError sets the error message on the response.
+	//
+	// If there is an error with the actual input .proto files that results in your plugin's business logic not being able to be executed
+	// (for example, a missing option), this error should be added to the response via SetError. If there is a system error, the
+	// Handler should return error, which will result in the plugin exiting with a non-zero exit code.
+	//
+	// If there is an existing error message already added, it will be overwritten.
+	// Note that empty error messages will be ignored (ie it will be as if no error was set).
+	SetError(message string)
+	// SetFeatureProto3Optional sets the FEATURE_PROTO3_OPTIONAL feature on the response.
+	//
+	// This function should be preferred over SetSupportedFeatures. Use SetSupportedFeatures only if you need low-level access.
+	SetFeatureProto3Optional()
+	// SetFeatureSupportsEditions sets the FEATURE_SUPPORTS_EDITIONS feature on the response along
+	// with the given min and max editions.
+	//
+	// This function should be preferred over calling SetSupportedFeatures, SetMinimumEdition, and SetMaximumEdition separately.
+	// Use SetSupportedFeatures, SetMinimumEdition, and SetMaximumEdition only if you need low-level access.
+	//
+	// The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
+	SetFeatureSupportsEditions(minimumEdition descriptorpb.Edition, maximumEdition descriptorpb.Edition)
+	// AddCodeGeneratorResponseFiles adds the CodeGeneratorResponse.Files to the response.
+	//
+	// See the documentation on CodeGeneratorResponse.File for the exact semantics.
+	//
+	// If you are just adding file content, use the simpler AddFile. This function is for lower-level access.
+	//
+	// The plugin will exit with a non-zero exit code if any of the following are true:
+	//
+	// - The CodeGeneratorResponse_File is nil.
+	// - The name is an invalid path.
+	//
+	// Paths are considered valid if they are non-empty, relative, use '/' as the path separator, and do not jump context.
+	//
+	// If a file with the same name was already added, or the file name is not cleaned, a warning will be produced.
+	AddCodeGeneratorResponseFiles(files ...*pluginpb.CodeGeneratorResponse_File)
+	// SetSupportedFeatures the given features on the response.
+	//
+	// You likely want to use the specific feature functions instead of this function.
+	// This function is for lower-level access.
+	//
+	// If there are existing features already added, they will be overwritten.
+	//
+	// If the features are not represented in the known CodeGeneratorResponse.Features,
+	// the plugin will exit with a non-zero exit code.
+	SetSupportedFeatures(supportedFeatures uint64)
+	// SetMinimumEdition sets the minimum edition.
+	//
+	// If you want to specify that you are supporting editions, it is likely easier to use
+	// SetFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
+	//
+	// The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
+	SetMinimumEdition(minimumEdition int32)
+	// SetMaximumEdition sets the maximum edition.
+	//
+	// If you want to specify that you are supporting editions, it is likely easier to use
+	// SetFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
+	//
+	// The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
+	SetMaximumEdition(maximumEdition int32)
+	// ToCodeGeneratorResponse creates a CodeGeneratorResponse from the values written to the ResponseWriter.
+	//
+	// Most users of this library will not need to call this function. This function is only used if you are
+	// invoking Handlers outside of Main or Run.
+	//
+	// This function can be called exactly once. Future calls to this function will result in an error.
+	ToCodeGeneratorResponse() (*pluginpb.CodeGeneratorResponse, error)
+
+	isResponseWriter()
+}
+
+// NewResponseWriter returns a new ResponseWriter.
+func NewResponseWriter(options ...ResponseWriterOption) ResponseWriter {
+	responseWriter := &responseWriter{
+		codeGeneratorResponse: &pluginpb.CodeGeneratorResponse{},
+	}
+	for _, option := range options {
+		option(responseWriter)
+	}
+	return responseWriter
+}
+
+// ResponseWriterOption is an option for a new ResponseWriter.
+type ResponseWriterOption func(*responseWriter)
+
+// ResponseWriterWithLenientValidation returns a new ResponseWriterOption that says handle non-critical CodeGeneratorResponse
+// validation issues as warnings that will be handled by the given warning handler.
+//
+// This allows the following issues to result in warnings instead of errors:
+//
+//   - Duplicate file names for files without insertion points. If the same file name is used two or more times for
+//     files without insertion points, the first occurrence of the file will be used and subsequent occurrences will
+//     be dropped.
+//   - File names that are not equal to filepath.ToSlash(filepath.Clean(name)). The file name will be modified
+//     with this normalization.
+//
+// These issues result in CodeGeneratorResponses that are not properly formed per the CodeGeneratorResponse
+// spec, however both protoc and buf have been resilient to these issues for years. There are numerous plugins
+// out in the wild that have these issues, and protoplugin should be able to function as a proxy to these
+// plugins without error.
+//
+// Most users of protoplugin should not use this option, this should only be used for plugins that proxy to other
+// plugins. If you are authoring a standalone plugin, you should instead make sure your responses are completely correct.
+//
+// The default is to error on these issues.
+//
+// Implementers of lenientValidateErrorFunc can assume that errors passed will be non-nil and have non-empty
+// values for err.Error().
+func ResponseWriterWithLenientValidation(lenientValidateErrorFunc func(error)) ResponseWriterOption {
+	return func(responseWriter *responseWriter) {
+		responseWriter.lenientValidateErrorFunc = lenientValidateErrorFunc
+	}
+}
+
+// *** PRIVATE ***
+
+type responseWriter struct {
 	codeGeneratorResponse *pluginpb.CodeGeneratorResponse
 	written               bool
 
-	lenientResponseValidateErrorFunc func(error)
+	lenientValidateErrorFunc func(error)
 
 	lock sync.RWMutex
 }
 
-// AddFile adds the file with the given content to the response.
-//
-// This takes care of the most common case of adding a CodeGeneratorResponse.File with content. If you need add a
-// CodeGeneratorResponse.File with insertion points or any other feature, use AddCodeGeneratorResponseFiles.
-//
-// The plugin will exit with a non-zero exit code if the name is an invalid path.
-// Paths are considered valid if they are non-empty, relative, use '/' as the path separator, and do not jump context.
-//
-// If a file with the same name was already added, or the file name is not cleaned, a warning will be produced.
-func (r *ResponseWriter) AddFile(name string, content string) {
+func (r *responseWriter) AddFile(name string, content string) {
 	r.AddCodeGeneratorResponseFiles(
 		&pluginpb.CodeGeneratorResponse_File{
 			Name:    proto.String(name),
@@ -51,15 +172,7 @@ func (r *ResponseWriter) AddFile(name string, content string) {
 	)
 }
 
-// SetError sets the error message on the response.
-//
-// If there is an error with the actual input .proto files that results in your plugin's business logic not being able to be executed
-// (for example, a missing option), this error should be added to the response via SetError. If there is a system error, the
-// Handler should return error, which will result in the plugin exiting with a non-zero exit code.
-//
-// If there is an existing error message already added, it will be overwritten.
-// Note that empty error messages will be ignored (ie it will be as if no error was set).
-func (r *ResponseWriter) SetError(message string) {
+func (r *responseWriter) SetError(message string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -72,60 +185,24 @@ func (r *ResponseWriter) SetError(message string) {
 	r.codeGeneratorResponse.Error = proto.String(message)
 }
 
-// SetFeatureProto3Optional sets the FEATURE_PROTO3_OPTIONAL feature on the response.
-//
-// This function should be preferred over SetSupportedFeatures. Use SetSupportedFeatures only if you need low-level access.
-func (r *ResponseWriter) SetFeatureProto3Optional() {
+func (r *responseWriter) SetFeatureProto3Optional() {
 	r.addSupportedFeatures(uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL))
 }
 
-// SetFeatureSupportsEditions sets the FEATURE_SUPPORTS_EDITIONS feature on the response along
-// with the given min and max editions.
-//
-// This function should be preferred over calling SetSupportedFeatures, SetMinimumEdition, and SetMaximumEdition separately.
-// Use SetSupportedFeatures, SetMinimumEdition, and SetMaximumEdition only if you need low-level access.
-//
-// The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
-func (r *ResponseWriter) SetFeatureSupportsEditions(
-	minimumEdition descriptorpb.Edition,
-	maximumEdition descriptorpb.Edition,
-) {
+func (r *responseWriter) SetFeatureSupportsEditions(minimumEdition descriptorpb.Edition, maximumEdition descriptorpb.Edition) {
 	r.addSupportedFeatures(uint64(pluginpb.CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS))
 	r.SetMinimumEdition(int32(minimumEdition))
 	r.SetMaximumEdition(int32(maximumEdition))
 }
 
-// AddCodeGeneratorResponseFiles adds the CodeGeneratorResponse.Files to the response.
-//
-// See the documentation on CodeGeneratorResponse.File for the exact semantics.
-//
-// If you are just adding file content, use the simpler AddFile. This function is for lower-level access.
-//
-// The plugin will exit with a non-zero exit code if any of the following are true:
-//
-// - The CodeGeneratorResponse_File is nil.
-// - The name is an invalid path.
-//
-// Paths are considered valid if they are non-empty, relative, use '/' as the path separator, and do not jump context.
-//
-// If a file with the same name was already added, or the file name is not cleaned, a warning will be produced.
-func (r *ResponseWriter) AddCodeGeneratorResponseFiles(files ...*pluginpb.CodeGeneratorResponse_File) {
+func (r *responseWriter) AddCodeGeneratorResponseFiles(files ...*pluginpb.CodeGeneratorResponse_File) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	r.codeGeneratorResponse.File = append(r.codeGeneratorResponse.GetFile(), files...)
 }
 
-// SetSupportedFeatures the given features on the response.
-//
-// You likely want to use the specific feature functions instead of this function.
-// This function is for lower-level access.
-//
-// If there are existing features already added, they will be overwritten.
-//
-// If the features are not represented in the known CodeGeneratorResponse.Features,
-// the plugin will exit with a non-zero exit code.
-func (r *ResponseWriter) SetSupportedFeatures(supportedFeatures uint64) {
+func (r *responseWriter) SetSupportedFeatures(supportedFeatures uint64) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -136,49 +213,21 @@ func (r *ResponseWriter) SetSupportedFeatures(supportedFeatures uint64) {
 	}
 }
 
-// SetMinimumEdition sets the minimum edition.
-//
-// If you want to specify that you are supporting editions, it is likely easier to use
-// SetFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
-//
-// The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
-func (r *ResponseWriter) SetMinimumEdition(minimumEdition int32) {
+func (r *responseWriter) SetMinimumEdition(minimumEdition int32) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	r.codeGeneratorResponse.MinimumEdition = proto.Int32(minimumEdition)
 }
 
-// SetMaximumEdition sets the maximum edition.
-//
-// If you want to specify that you are supporting editions, it is likely easier to use
-// SetFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
-//
-// The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
-func (r *ResponseWriter) SetMaximumEdition(maximumEdition int32) {
+func (r *responseWriter) SetMaximumEdition(maximumEdition int32) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	r.codeGeneratorResponse.MaximumEdition = proto.Int32(maximumEdition)
 }
 
-// *** PRIVATE ***
-
-func newResponseWriter(lenientResponseValidateErrorFunc func(error)) *ResponseWriter {
-	return &ResponseWriter{
-		codeGeneratorResponse:            &pluginpb.CodeGeneratorResponse{},
-		lenientResponseValidateErrorFunc: lenientResponseValidateErrorFunc,
-	}
-}
-
-func (r *ResponseWriter) addSupportedFeatures(supportedFeatures uint64) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	r.codeGeneratorResponse.SupportedFeatures = proto.Uint64(r.codeGeneratorResponse.GetSupportedFeatures() | supportedFeatures)
-}
-
-func (r *ResponseWriter) toCodeGeneratorResponse() (*pluginpb.CodeGeneratorResponse, error) {
+func (r *responseWriter) ToCodeGeneratorResponse() (*pluginpb.CodeGeneratorResponse, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
@@ -191,8 +240,17 @@ func (r *ResponseWriter) toCodeGeneratorResponse() (*pluginpb.CodeGeneratorRespo
 	}
 	r.written = true
 
-	if err := validateAndNormalizeCodeGeneratorResponse(r.codeGeneratorResponse, r.lenientResponseValidateErrorFunc); err != nil {
+	if err := validateAndNormalizeCodeGeneratorResponse(r.codeGeneratorResponse, r.lenientValidateErrorFunc); err != nil {
 		return nil, err
 	}
 	return r.codeGeneratorResponse, nil
 }
+
+func (r *responseWriter) addSupportedFeatures(supportedFeatures uint64) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.codeGeneratorResponse.SupportedFeatures = proto.Uint64(r.codeGeneratorResponse.GetSupportedFeatures() | supportedFeatures)
+}
+
+func (*responseWriter) isResponseWriter() {}

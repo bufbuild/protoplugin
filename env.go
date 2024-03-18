@@ -16,7 +16,7 @@ package protoplugin
 
 import "io"
 
-// Env represents an environment for a plugin to run within.
+// Env represents an environment.
 //
 // This wraps items like args, environment variables, and stdio.
 //
@@ -37,13 +37,13 @@ type Env struct {
 	Stderr io.Writer
 }
 
-// HandlerEnv represents an environment that a Handler is run within.
+// PluginEnv represents an environment that a plugin is run within.
 //
-// This provides the environment variables and stderr to a Handler. A Handler should not have
+// This provides the environment variables and stderr. A plugin implementation should not have
 // access to stdin, stdout, or the args, as these are controlled by the plugin framework.
 //
 // When calling Main, this uses the values os.Environ and os.Stderr.
-type HandlerEnv struct {
+type PluginEnv struct {
 	// Environment are the environment variables.
 	Environ []string
 	// Stderr is the stderr for the plugin.

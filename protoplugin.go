@@ -30,7 +30,7 @@ import (
 
 var (
 	// osEnv is the os-based Env used in Main.
-	osEnv = &Env{
+	osEnv = Env{
 		Args:    os.Args[1:],
 		Environ: os.Environ(),
 		Stdin:   os.Stdin,
@@ -77,7 +77,7 @@ func Main(handler Handler, options ...MainOption) {
 // when writing plugin tests, or if you want to use your own custom logic for main functions.
 func Run(
 	ctx context.Context,
-	env *Env,
+	env Env,
 	handler Handler,
 	options ...RunOption,
 ) error {
@@ -114,8 +114,8 @@ func WithVersion(version string) RunOption {
 	})
 }
 
-// WithLenientResponseValidation returns a new GenerateOption that says handle non-critical issues with response
-// construction as warnings that will be handled by the given warning handler.
+// WithLenientValidation returns a new RunOption that says handle non-critical issues
+// as warnings that will be handled by the given warning handler.
 //
 // This allows the following issues to result in warnings instead of errors:
 //
@@ -137,11 +137,11 @@ func WithVersion(version string) RunOption {
 //
 // The default is to error on these issues.
 //
-// Implementers of lenientResponseValidationErrorFunc can assume that errors passed will be non-nil and have non-empty
+// Implementers of lenientValidationErrorFunc can assume that errors passed will be non-nil and have non-empty
 // values for err.Error().
-func WithLenientResponseValidation(lenientResponseValidateErrorFunc func(error)) RunOption {
+func WithLenientValidation(lenientValidateErrorFunc func(error)) RunOption {
 	return optsFunc(func(opts *opts) {
-		opts.lenientResponseValidateErrorFunc = lenientResponseValidateErrorFunc
+		opts.lenientValidateErrorFunc = lenientValidateErrorFunc
 	})
 }
 
@@ -149,7 +149,7 @@ func WithLenientResponseValidation(lenientResponseValidateErrorFunc func(error))
 
 func run(
 	ctx context.Context,
-	env *Env,
+	env Env,
 	handler Handler,
 	opts *opts,
 ) error {
@@ -173,16 +173,23 @@ func run(
 	if err := proto.Unmarshal(input, codeGeneratorRequest); err != nil {
 		return err
 	}
-	codeGeneratorResponse, err := generate(
+	request, err := NewRequest(codeGeneratorRequest)
+	if err != nil {
+		return err
+	}
+	responseWriter := NewResponseWriter(ResponseWriterWithLenientValidation(opts.lenientValidateErrorFunc))
+	if err := handler.Handle(
 		ctx,
-		&HandlerEnv{
+		PluginEnv{
 			Environ: env.Environ,
 			Stderr:  env.Stderr,
 		},
-		codeGeneratorRequest,
-		handler,
-		opts,
-	)
+		responseWriter,
+		request,
+	); err != nil {
+		return err
+	}
+	codeGeneratorResponse, err := responseWriter.ToCodeGeneratorResponse()
 	if err != nil {
 		return err
 	}
@@ -192,24 +199,6 @@ func run(
 	}
 	_, err = env.Stdout.Write(data)
 	return err
-}
-
-func generate(
-	ctx context.Context,
-	handlerEnv *HandlerEnv,
-	codeGeneratorRequest *pluginpb.CodeGeneratorRequest,
-	handler Handler,
-	opts *opts,
-) (*pluginpb.CodeGeneratorResponse, error) {
-	request, err := newRequest(codeGeneratorRequest)
-	if err != nil {
-		return nil, err
-	}
-	responseWriter := newResponseWriter(opts.lenientResponseValidateErrorFunc)
-	if err := handler.Handle(ctx, handlerEnv, responseWriter, request); err != nil {
-		return nil, err
-	}
-	return responseWriter.toCodeGeneratorResponse()
 }
 
 // withCancelInterruptSignal returns a context that is cancelled if interrupt signals are sent.
@@ -237,8 +226,8 @@ func newInterruptSignalChannel() (<-chan os.Signal, func()) {
 }
 
 type opts struct {
-	version                          string
-	lenientResponseValidateErrorFunc func(error)
+	version                  string
+	lenientValidateErrorFunc func(error)
 }
 
 func newOpts() *opts {

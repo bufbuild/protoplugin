@@ -77,9 +77,9 @@ func main() {
 
 func handle(
 	_ context.Context,
-  _ *protoplugin.HandlerEnv,
-	responseWriter *protoplugin.ResponseWriter,
-	request *protoplugin.Request,
+  _ protoplugin.PluginEnv,
+	responseWriter protoplugin.ResponseWriter,
+	request protoplugin.Request,
 ) error {
 	// Set the flag indicating that we support proto3 optionals. We don't even use them in this
 	// plugin, but protoc will error if it encounters a proto3 file with an optional but the
@@ -193,7 +193,7 @@ Errors or warnings will also be produced if:
   a duplicate name is plugin authoring issue, and here at Buf, we've seen a lot of plugins have this issue!
 - Any file path is not cleaned.
 
-By default, these are errors, however if `WithLenientResponseValidation` is set, these will be warnings.
+By default, these are errors, however if `WithLenientValidation` is set, these will be warnings.
 
 ## What this library is not
 

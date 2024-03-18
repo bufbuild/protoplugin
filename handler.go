@@ -44,21 +44,21 @@ type Handler interface {
 	// (for example, a missing option), this error should be added to the response via SetError.
 	Handle(
 		ctx context.Context,
-		handlerEnv *HandlerEnv,
-		responseWriter *ResponseWriter,
-		request *Request,
+		pluginEnv PluginEnv,
+		responseWriter ResponseWriter,
+		request Request,
 	) error
 }
 
 // HandlerFunc is a function that implements Handler.
-type HandlerFunc func(context.Context, *HandlerEnv, *ResponseWriter, *Request) error
+type HandlerFunc func(context.Context, PluginEnv, ResponseWriter, Request) error
 
 // Handle implements Handler.
 func (h HandlerFunc) Handle(
 	ctx context.Context,
-	handlerEnv *HandlerEnv,
-	responseWriter *ResponseWriter,
-	request *Request,
+	pluginEnv PluginEnv,
+	responseWriter ResponseWriter,
+	request Request,
 ) error {
-	return h(ctx, handlerEnv, responseWriter, request)
+	return h(ctx, pluginEnv, responseWriter, request)
 }
