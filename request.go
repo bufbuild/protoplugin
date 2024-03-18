@@ -16,8 +16,6 @@ package protoplugin
 
 import (
 	"errors"
-	"slices"
-	"sync"
 
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -101,9 +99,9 @@ func NewRequest(codeGeneratorRequest *pluginpb.CodeGeneratorRequest) (Request, e
 		codeGeneratorRequest: codeGeneratorRequest,
 	}
 	request.getFilesToGenerateMap =
-		sync.OnceValue(request.getFilesToGenerateMapUncached)
+		onceValue(request.getFilesToGenerateMapUncached)
 	request.getSourceFileDescriptorNameToFileDescriptorProtoMap =
-		sync.OnceValue(request.getSourceFileDescriptorNameToFileDescriptorProtoMapUncached)
+		onceValue(request.getSourceFileDescriptorNameToFileDescriptorProtoMapUncached)
 	return request, nil
 }
 
@@ -147,7 +145,7 @@ func (r *request) FileDescriptorProtosToGenerate() []*descriptorpb.FileDescripto
 	//
 	// We have validated that source_file_descriptors is populated via WithSourceRetentionOptions.
 	if r.sourceRetentionOptions {
-		return slices.Clone(r.codeGeneratorRequest.GetSourceFileDescriptors())
+		return slicesClone(r.codeGeneratorRequest.GetSourceFileDescriptors())
 	}
 	// Otherwise, we need to get the values in proto_file that are in file_to_generate.
 	filesToGenerateMap := r.getFilesToGenerateMap()
@@ -163,7 +161,7 @@ func (r *request) FileDescriptorProtosToGenerate() []*descriptorpb.FileDescripto
 func (r *request) AllFileDescriptorProtos() []*descriptorpb.FileDescriptorProto {
 	// If we do not want source-retention options, proto_file is all we need.
 	if !r.sourceRetentionOptions {
-		return slices.Clone(r.codeGeneratorRequest.GetProtoFile())
+		return slicesClone(r.codeGeneratorRequest.GetProtoFile())
 	}
 	// Otherwise, we need to replace the values in proto_file that are in file_to_generate
 	// with the values from source_file_descriptors.
