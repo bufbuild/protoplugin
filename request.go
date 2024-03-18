@@ -16,8 +16,6 @@ package protoplugin
 
 import (
 	"errors"
-	"slices"
-	"sync"
 
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -147,7 +145,7 @@ func (r *request) FileDescriptorProtosToGenerate() []*descriptorpb.FileDescripto
 	//
 	// We have validated that source_file_descriptors is populated via WithSourceRetentionOptions.
 	if r.sourceRetentionOptions {
-		return slices.Clone(r.codeGeneratorRequest.GetSourceFileDescriptors())
+		return slicesClone(r.codeGeneratorRequest.GetSourceFileDescriptors())
 	}
 	// Otherwise, we need to get the values in proto_file that are in file_to_generate.
 	filesToGenerateMap := r.getFilesToGenerateMap()
@@ -163,7 +161,7 @@ func (r *request) FileDescriptorProtosToGenerate() []*descriptorpb.FileDescripto
 func (r *request) AllFileDescriptorProtos() []*descriptorpb.FileDescriptorProto {
 	// If we do not want source-retention options, proto_file is all we need.
 	if !r.sourceRetentionOptions {
-		return slices.Clone(r.codeGeneratorRequest.GetProtoFile())
+		return slicesClone(r.codeGeneratorRequest.GetProtoFile())
 	}
 	// Otherwise, we need to replace the values in proto_file that are in file_to_generate
 	// with the values from source_file_descriptors.
@@ -241,36 +239,3 @@ func (r *request) getSourceFileDescriptorNameToFileDescriptorProtoMapUncached() 
 }
 
 func (*request) isRequest() {}
-
-// onceValue returns a function that invokes f only once and returns the value
-// returned by f. The returned function may be called concurrently.
-//
-// If f panics, the returned function will panic with the same value on every call.
-//
-// TODO: This is directly copied from 1.21 source, remove when no longer need 1.20.
-func onceValue[T any](f func() T) func() T {
-	var (
-		once   sync.Once
-		valid  bool
-		p      any
-		result T
-	)
-	g := func() {
-		defer func() {
-			p = recover()
-			if !valid {
-				panic(p)
-			}
-		}()
-		result = f()
-		f = nil
-		valid = true
-	}
-	return func() T {
-		once.Do(g)
-		if !valid {
-			panic(p)
-		}
-		return result
-	}
-}
