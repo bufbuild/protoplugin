@@ -180,9 +180,10 @@ func (r *responseWriter) SetError(message string) {
 	// This is also consistent with protoc's behavior.
 	// Ref: https://github.com/protocolbuffers/protobuf/blob/069f989b483e63005f87ab309de130677718bbec/src/google/protobuf/compiler/plugin.proto#L100-L108.
 	if message == "" {
-		return
+		r.codeGeneratorResponse.Error = nil
+	} else {
+		r.codeGeneratorResponse.Error = proto.String(message)
 	}
-	r.codeGeneratorResponse.Error = proto.String(message)
 }
 
 func (r *responseWriter) SetFeatureProto3Optional() {
@@ -217,14 +218,22 @@ func (r *responseWriter) SetMinimumEdition(minimumEdition int32) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	r.codeGeneratorResponse.MinimumEdition = proto.Int32(minimumEdition)
+	if minimumEdition == 0 {
+		r.codeGeneratorResponse.MinimumEdition = nil
+	} else {
+		r.codeGeneratorResponse.MinimumEdition = proto.Int32(minimumEdition)
+	}
 }
 
 func (r *responseWriter) SetMaximumEdition(maximumEdition int32) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	r.codeGeneratorResponse.MaximumEdition = proto.Int32(maximumEdition)
+	if maximumEdition == 0 {
+		r.codeGeneratorResponse.MaximumEdition = nil
+	} else {
+		r.codeGeneratorResponse.MaximumEdition = proto.Int32(maximumEdition)
+	}
 }
 
 func (r *responseWriter) ToCodeGeneratorResponse() (*pluginpb.CodeGeneratorResponse, error) {
