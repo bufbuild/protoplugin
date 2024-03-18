@@ -101,9 +101,9 @@ func NewRequest(codeGeneratorRequest *pluginpb.CodeGeneratorRequest) (Request, e
 		codeGeneratorRequest: codeGeneratorRequest,
 	}
 	request.getFilesToGenerateMap =
-		sync.OnceValue(request.getFilesToGenerateMapUncached)
+		onceValue(request.getFilesToGenerateMapUncached)
 	request.getSourceFileDescriptorNameToFileDescriptorProtoMap =
-		sync.OnceValue(request.getSourceFileDescriptorNameToFileDescriptorProtoMapUncached)
+		onceValue(request.getSourceFileDescriptorNameToFileDescriptorProtoMapUncached)
 	return request, nil
 }
 
@@ -241,3 +241,36 @@ func (r *request) getSourceFileDescriptorNameToFileDescriptorProtoMapUncached() 
 }
 
 func (*request) isRequest() {}
+
+// onceValue returns a function that invokes f only once and returns the value
+// returned by f. The returned function may be called concurrently.
+//
+// If f panics, the returned function will panic with the same value on every call.
+//
+// TODO: This is directly copied from 1.21 source, remove when no longer need 1.20.
+func onceValue[T any](f func() T) func() T {
+	var (
+		once   sync.Once
+		valid  bool
+		p      any
+		result T
+	)
+	g := func() {
+		defer func() {
+			p = recover()
+			if !valid {
+				panic(p)
+			}
+		}()
+		result = f()
+		f = nil
+		valid = true
+	}
+	return func() T {
+		once.Do(g)
+		if !valid {
+			panic(p)
+		}
+		return result
+	}
+}
