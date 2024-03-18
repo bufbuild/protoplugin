@@ -64,3 +64,9 @@ issues:
     - linters:
       - nestif
       path: validate.go
+      # compatibility.go contains functions copied from the Golang source, do not
+      # modify to make them in line with our lint standards.
+    - linters:
+        - forbidigo
+        - varnamelen
+      path: compatibility.go
