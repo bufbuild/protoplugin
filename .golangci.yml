@@ -56,6 +56,9 @@ issues:
     - "err113: do not define dynamic errors.*"
   exclude-rules:
     - linters:
+      - nilnil
+      path: compiler_version.go
+    - linters:
       - protogetter
       path: protoplugin_test.go
     - linters:

@@ -14,26 +14,52 @@
 
 package protoplugin
 
-import "fmt"
+import (
+	"fmt"
+
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/pluginpb"
+)
 
 // CompilerVersion is a the version of a compiler provided on a Request.
 type CompilerVersion struct {
 	// Major is the major version of the compiler.
 	//
-	// If provided on a Request, will always be >=0.
+	// If provided on a Request or constructed with NewCompilerVersion, will always be >=0.
 	Major int
 	// Minor is the minor version of the compiler.
 	//
-	// If provided on a Request, will always be >=0.
+	// If provided on a Request or constructed with NewCompilerVersion, will always be >=0.
 	Minor int
 	// Patch is the patch version of the compiler.
 	//
-	// If provided on a Request, will always be >=0.
+	// If provided on a Request or constructed with NewCompilerVersion, will always be >=0.
 	Patch int
 	// Suffix is the suffix for non-mainline releases.
 	//
 	// Will be empty for mainline releases.
 	Suffix string
+}
+
+// NewCompilerVersion returns a new CompilerVersion for the *pluginpb.Version.
+//
+// The returned CompilerVersion will be validated, that is the Major, Minor and Patch values
+// will be non-negative.
+//
+// If version is nil, this returns nil.
+func NewCompilerVersion(version *pluginpb.Version) (*CompilerVersion, error) {
+	if version == nil {
+		return nil, nil
+	}
+	if err := validateCompilerVersion(version); err != nil {
+		return nil, err
+	}
+	return &CompilerVersion{
+		Major:  int(version.GetMajor()),
+		Minor:  int(version.GetMinor()),
+		Patch:  int(version.GetPatch()),
+		Suffix: version.GetSuffix(),
+	}, nil
 }
 
 // String prints the string representation of the CompilerVersion.
@@ -55,4 +81,27 @@ func (c *CompilerVersion) String() string {
 		return value + "-" + c.Suffix
 	}
 	return value
+}
+
+// ToProto converts the CompilerVersion into a *pluginpb.Version.
+//
+// If the CompilerVersion is nil, this returns nil.
+func (c *CompilerVersion) ToProto() *pluginpb.Version {
+	if c == nil {
+		return nil
+	}
+	version := &pluginpb.Version{}
+	if c.Major != 0 {
+		version.Major = proto.Int32(int32(c.Major))
+	}
+	if c.Minor != 0 {
+		version.Minor = proto.Int32(int32(c.Minor))
+	}
+	if c.Patch != 0 {
+		version.Patch = proto.Int32(int32(c.Patch))
+	}
+	if c.Suffix != "" {
+		version.Suffix = proto.String(c.Suffix)
+	}
+	return version
 }

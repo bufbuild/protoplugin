@@ -181,6 +181,7 @@ func (r *request) AllFileDescriptorProtos() []*descriptorpb.FileDescriptorProto 
 }
 
 func (r *request) CompilerVersion() *CompilerVersion {
+	// We have already validated the *pluginpb.Version via validateCompilerVersion, no need to validate here.
 	if version := r.codeGeneratorRequest.GetCompilerVersion(); version != nil {
 		return &CompilerVersion{
 			Major:  int(version.GetMajor()),

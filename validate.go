@@ -86,14 +86,8 @@ func validateCodeGeneratorRequest(request *pluginpb.CodeGeneratorRequest) (retEr
 		}
 	}
 	if version := request.GetCompilerVersion(); version != nil {
-		if major := version.GetMajor(); major < 0 {
-			return fmt.Errorf("compiler_version.major: negative: %d", int(major))
-		}
-		if minor := version.GetMinor(); minor < 0 {
-			return fmt.Errorf("compiler_version.minor: negative: %d", int(minor))
-		}
-		if patch := version.GetPatch(); patch < 0 {
-			return fmt.Errorf("compiler_version.patch: negative: %d", int(patch))
+		if err := validateCompilerVersion(version); err != nil {
+			return fmt.Errorf("compiler_version: %w", err)
 		}
 	}
 	return nil
@@ -136,6 +130,19 @@ func validateCodeGeneratorRequestFileDescriptorProtos(
 				return fmt.Errorf("%s: path %q is not contained within file_to_generate", fieldName, fileDescriptorProtoName)
 			}
 		}
+	}
+	return nil
+}
+
+func validateCompilerVersion(version *pluginpb.Version) error {
+	if major := version.GetMajor(); major < 0 {
+		return fmt.Errorf("major: negative: %d", int(major))
+	}
+	if minor := version.GetMinor(); minor < 0 {
+		return fmt.Errorf("minor: negative: %d", int(minor))
+	}
+	if patch := version.GetPatch(); patch < 0 {
+		return fmt.Errorf("patch: negative: %d", int(patch))
 	}
 	return nil
 }
