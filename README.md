@@ -120,7 +120,7 @@ all of the following is true:
 TODO: Update with latest validation
 
 - The `CodeGeneratorRequest` given to the plugin was not nil.
-- `file_to_generate and `proto_file were not empty.
+- `file_to_generate` and `proto_file` were not empty.
 - Each `FileDescriptorProto` in `proto_file` will have a valid path (see below) as the `name` field.
 - Each value of `file_to_generate` will be a valid path.
 - Each value of `file_to_generate` will have a corresponding value in `proto_file`.
