@@ -73,3 +73,7 @@ issues:
         - forbidigo
         - varnamelen
       path: compatibility.go
+    - linters:
+        - dupl
+        - forcetypeassert
+      path: protopluginutil/source_retention_options_test.go
