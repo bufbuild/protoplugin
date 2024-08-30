@@ -131,7 +131,7 @@ func stripSourceRetentionOptionsFromProtoMessage[M proto.Message](
 	var hasFieldToStrip bool
 	var numFieldsToKeep int
 	var err error
-	optionsRef.Range(func(field protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+	optionsRef.Range(func(field protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
 		fieldOpts, ok := field.Options().(*descriptorpb.FieldOptions)
 		if !ok {
 			err = fmt.Errorf("field options is unexpected type: got %T, want %T", field.Options(), fieldOpts)

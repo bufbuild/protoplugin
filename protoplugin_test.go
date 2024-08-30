@@ -46,8 +46,8 @@ func TestBasic(t *testing.T) {
 		},
 		HandlerFunc(
 			func(
-				ctx context.Context,
-				pluginEnv PluginEnv,
+				_ context.Context,
+				_ PluginEnv,
 				responseWriter ResponseWriter,
 				request Request,
 			) error {
@@ -84,7 +84,7 @@ func TestWithVersionOption(t *testing.T) {
 				Stdout:  stdout,
 				Stderr:  io.Discard,
 			},
-			HandlerFunc(func(ctx context.Context, _ PluginEnv, _ ResponseWriter, _ Request) error { return nil }),
+			HandlerFunc(func(_ context.Context, _ PluginEnv, _ ResponseWriter, _ Request) error { return nil }),
 			runOptions...,
 		)
 		return stdout.String(), err

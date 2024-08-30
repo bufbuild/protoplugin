@@ -33,9 +33,9 @@ func newUnknownArgumentsError(args []string) error {
 
 func (a *unknownArgumentsError) Error() string {
 	if len(a.args) == 1 {
-		return fmt.Sprintf("unknown argument: %s", a.args[0])
+		return "unknown argument: " + a.args[0]
 	}
-	return fmt.Sprintf("unknown arguments: %s", strings.Join(a.args, " "))
+	return "unknown arguments: " + strings.Join(a.args, " ")
 }
 
 // unnormalizedCodeGeneratorResponseFileNameError is the error returned if a
