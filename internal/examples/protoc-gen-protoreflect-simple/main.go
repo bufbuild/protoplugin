@@ -54,7 +54,7 @@ func handle(
 	for _, fileDescriptor := range fileDescriptors {
 		messages := fileDescriptor.Messages()
 		topLevelMessageNames := make([]string, messages.Len())
-		for i := 0; i < messages.Len(); i++ { //nolint:intrange
+		for i := 0; i < messages.Len(); i++ {
 			topLevelMessageNames[i] = string(messages.Get(i).Name())
 		}
 		// Add the response file to the response.

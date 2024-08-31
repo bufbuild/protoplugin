@@ -92,13 +92,13 @@ func (c *CompilerVersion) ToProto() *pluginpb.Version {
 	}
 	version := &pluginpb.Version{}
 	if c.Major != 0 {
-		version.Major = proto.Int32(int32(c.Major))
+		version.Major = proto.Int32(int32(c.Major)) // #nosec:G115 should never overflow
 	}
 	if c.Minor != 0 {
-		version.Minor = proto.Int32(int32(c.Minor))
+		version.Minor = proto.Int32(int32(c.Minor)) // #nosec:G115 should never overflow
 	}
 	if c.Patch != 0 {
-		version.Patch = proto.Int32(int32(c.Patch))
+		version.Patch = proto.Int32(int32(c.Patch)) // #nosec:G115 should never overflow
 	}
 	if c.Suffix != "" {
 		version.Suffix = proto.String(c.Suffix)

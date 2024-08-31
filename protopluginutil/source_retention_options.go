@@ -493,7 +493,8 @@ func stripOptionsFromAll[T comparable](
 ) ([]T, bool, error) {
 	var updated []T // initialized lazily, only when/if a copy is needed
 	for i, item := range slice {
-		newItem, err := updateFunc(item, path.push(int32(i)), removedPaths)
+		index := int32(i) // #nosec:G115 should never overflow
+		newItem, err := updateFunc(item, path.push(index), removedPaths)
 		if err != nil {
 			return nil, false, err
 		}

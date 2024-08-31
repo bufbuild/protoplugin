@@ -1,6 +1,6 @@
 module github.com/bufbuild/protoplugin
 
-go 1.22
+go 1.21
 
 require (
 	github.com/bufbuild/protocompile v0.9.0
