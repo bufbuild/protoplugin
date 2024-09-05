@@ -131,7 +131,7 @@ func stripSourceRetentionOptionsFromProtoMessage[M proto.Message](
 	var hasFieldToStrip bool
 	var numFieldsToKeep int
 	var err error
-	optionsRef.Range(func(field protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+	optionsRef.Range(func(field protoreflect.FieldDescriptor, _ protoreflect.Value) bool {
 		fieldOpts, ok := field.Options().(*descriptorpb.FieldOptions)
 		if !ok {
 			err = fmt.Errorf("field options is unexpected type: got %T, want %T", field.Options(), fieldOpts)
@@ -493,7 +493,8 @@ func stripOptionsFromAll[T comparable](
 ) ([]T, bool, error) {
 	var updated []T // initialized lazily, only when/if a copy is needed
 	for i, item := range slice {
-		newItem, err := updateFunc(item, path.push(int32(i)), removedPaths)
+		index := int32(i) // #nosec:G115 should never overflow
+		newItem, err := updateFunc(item, path.push(index), removedPaths)
 		if err != nil {
 			return nil, false, err
 		}

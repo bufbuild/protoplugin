@@ -182,10 +182,10 @@ func validateAndNormalizeCodeGeneratorResponse(
 	}
 	if response.GetSupportedFeatures()&uint64(pluginpb.CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS) != 0 {
 		if response.GetMinimumEdition() == 0 {
-			return fmt.Errorf("supported_features: FEATURE_SUPPORTS_EDITIONS specified but no minimum_edition set")
+			return errors.New("supported_features: FEATURE_SUPPORTS_EDITIONS specified but no minimum_edition set")
 		}
 		if response.GetMaximumEdition() == 0 {
-			return fmt.Errorf("supported_features: FEATURE_SUPPORTS_EDITIONS specified but no maximum_edition set")
+			return errors.New("supported_features: FEATURE_SUPPORTS_EDITIONS specified but no maximum_edition set")
 		}
 		if response.GetMinimumEdition() > response.GetMaximumEdition() {
 			return fmt.Errorf(
