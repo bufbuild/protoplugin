@@ -105,6 +105,36 @@ func TestWithVersionOption(t *testing.T) {
 	require.Equal(t, "0.0.1\n", out)
 }
 
+func TestWithUnmarshalOptionsOption(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	fileDescriptorProtos, err := compile(ctx, map[string][]byte{
+		"a.proto": []byte(`syntax = "proto3"; package foo; message A {}`),
+	})
+	require.NoError(t, err)
+
+	codeGeneratorRequest := &pluginpb.CodeGeneratorRequest{
+		FileToGenerate: []string{"a.proto"},
+		ProtoFile:      fileDescriptorProtos,
+	}
+	codeGeneratorRequestData, err := proto.Marshal(codeGeneratorRequest)
+	require.NoError(t, err)
+
+	stdin := bytes.NewReader(codeGeneratorRequestData)
+	stdout := bytes.NewBuffer(nil)
+
+	err = Run(
+		ctx,
+		Env{Stdin: stdin, Stdout: stdout, Stderr: io.Discard},
+		HandlerFunc(func(_ context.Context, _ PluginEnv, _ ResponseWriter, _ Request) error { return nil }),
+		WithUnmarshalOptions(proto.UnmarshalOptions{RecursionLimit: 1}),
+	)
+	require.ErrorIs(t, err, proto.Error)
+	require.ErrorContains(t, err, "exceeded maximum recursion depth")
+}
+
 func testBasic(
 	t *testing.T,
 	fileToGenerate []string,

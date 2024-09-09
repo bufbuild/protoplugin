@@ -145,6 +145,15 @@ func WithLenientValidation(lenientValidateErrorFunc func(error)) RunOption {
 	})
 }
 
+// WithUnmarshalOptions returns a new RunOption that overrides the default proto.UnmarshalOptions for decoding
+// the CodeGeneratorRequest. Among other uses, this is useful if you need to control how extensions are resolved
+// in the CodeGeneratorRequest.
+func WithUnmarshalOptions(unmarshalOptions proto.UnmarshalOptions) RunOption {
+	return optsFunc(func(opts *opts) {
+		opts.unmarshalOptions = unmarshalOptions
+	})
+}
+
 /// *** PRIVATE ***
 
 func run(
@@ -170,7 +179,7 @@ func run(
 		return err
 	}
 	codeGeneratorRequest := &pluginpb.CodeGeneratorRequest{}
-	if err := proto.Unmarshal(input, codeGeneratorRequest); err != nil {
+	if err := opts.unmarshalOptions.Unmarshal(input, codeGeneratorRequest); err != nil {
 		return err
 	}
 	request, err := NewRequest(codeGeneratorRequest)
@@ -228,6 +237,7 @@ func newInterruptSignalChannel() (<-chan os.Signal, func()) {
 type opts struct {
 	version                  string
 	lenientValidateErrorFunc func(error)
+	unmarshalOptions         proto.UnmarshalOptions
 }
 
 func newOpts() *opts {
