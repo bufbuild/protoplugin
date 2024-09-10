@@ -148,9 +148,9 @@ func WithLenientValidation(lenientValidateErrorFunc func(error)) RunOption {
 
 // WithExtensionTypeResolver returns a new RunOption that overrides the default extension resolver when
 // unmarshaling Protobuf messages.
-func WithExtensionTypeResolver(resolver protoregistry.ExtensionTypeResolver) RunOption {
+func WithExtensionTypeResolver(extensionTypeResolver protoregistry.ExtensionTypeResolver) RunOption {
 	return optsFunc(func(opts *opts) {
-		opts.extensionTypeResolver = resolver
+		opts.extensionTypeResolver = extensionTypeResolver
 	})
 }
 
