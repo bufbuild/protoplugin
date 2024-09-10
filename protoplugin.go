@@ -25,6 +25,7 @@ import (
 	"os/signal"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
@@ -145,6 +146,14 @@ func WithLenientValidation(lenientValidateErrorFunc func(error)) RunOption {
 	})
 }
 
+// WithExtensionTypeResolver returns a new RunOption that overrides the default extension resolver when
+// unmarshaling Protobuf messages.
+func WithExtensionTypeResolver(extensionTypeResolver protoregistry.ExtensionTypeResolver) RunOption {
+	return optsFunc(func(opts *opts) {
+		opts.extensionTypeResolver = extensionTypeResolver
+	})
+}
+
 /// *** PRIVATE ***
 
 func run(
@@ -170,7 +179,8 @@ func run(
 		return err
 	}
 	codeGeneratorRequest := &pluginpb.CodeGeneratorRequest{}
-	if err := proto.Unmarshal(input, codeGeneratorRequest); err != nil {
+	unmarshalOptions := proto.UnmarshalOptions{Resolver: opts.extensionTypeResolver}
+	if err := unmarshalOptions.Unmarshal(input, codeGeneratorRequest); err != nil {
 		return err
 	}
 	request, err := NewRequest(codeGeneratorRequest)
@@ -228,6 +238,7 @@ func newInterruptSignalChannel() (<-chan os.Signal, func()) {
 type opts struct {
 	version                  string
 	lenientValidateErrorFunc func(error)
+	extensionTypeResolver    protoregistry.ExtensionTypeResolver
 }
 
 func newOpts() *opts {
