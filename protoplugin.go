@@ -25,6 +25,7 @@ import (
 	"os/signal"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
@@ -145,12 +146,11 @@ func WithLenientValidation(lenientValidateErrorFunc func(error)) RunOption {
 	})
 }
 
-// WithUnmarshalOptions returns a new RunOption that overrides the default proto.UnmarshalOptions for decoding
-// the CodeGeneratorRequest. Among other uses, this is useful if you need to control how extensions are resolved
-// in the CodeGeneratorRequest.
-func WithUnmarshalOptions(unmarshalOptions proto.UnmarshalOptions) RunOption {
+// WithExtensionTypeResolver returns a new RunOption that overrides the default extension resolver for decoding
+// the CodeGeneratorRequest.
+func WithExtensionTypeResolver(resolver protoregistry.ExtensionTypeResolver) RunOption {
 	return optsFunc(func(opts *opts) {
-		opts.unmarshalOptions = unmarshalOptions
+		opts.extensionTypeResolver = resolver
 	})
 }
 
@@ -179,7 +179,8 @@ func run(
 		return err
 	}
 	codeGeneratorRequest := &pluginpb.CodeGeneratorRequest{}
-	if err := opts.unmarshalOptions.Unmarshal(input, codeGeneratorRequest); err != nil {
+	unmarshalOptions := proto.UnmarshalOptions{Resolver: opts.extensionTypeResolver}
+	if err := unmarshalOptions.Unmarshal(input, codeGeneratorRequest); err != nil {
 		return err
 	}
 	request, err := NewRequest(codeGeneratorRequest)
@@ -237,7 +238,7 @@ func newInterruptSignalChannel() (<-chan os.Signal, func()) {
 type opts struct {
 	version                  string
 	lenientValidateErrorFunc func(error)
-	unmarshalOptions         proto.UnmarshalOptions
+	extensionTypeResolver    protoregistry.ExtensionTypeResolver
 }
 
 func newOpts() *opts {

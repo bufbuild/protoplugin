@@ -28,7 +28,9 @@ import (
 	"github.com/bufbuild/protocompile/protoutil"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
@@ -105,13 +107,58 @@ func TestWithVersionOption(t *testing.T) {
 	require.Equal(t, "0.0.1\n", out)
 }
 
-func TestWithUnmarshalOptionsOption(t *testing.T) {
+func TestWithExtensionTypeResolverOption(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 
+	fakeDescriptorProto := []byte(`
+		syntax = "proto2";
+		package google.protobuf;
+		message FieldOptions { extensions 1000 to max; }
+	`)
+	extensionDeclarationProto := []byte(`
+		syntax = "proto3";
+		package foo;
+		import "google/protobuf/descriptor.proto";
+		extend google.protobuf.FieldOptions { fixed32 my_extension = 1000; }
+	`)
+	extFiles, err := (&protocompile.Compiler{
+		Resolver: &protocompile.SourceResolver{
+			Accessor: func(path string) (io.ReadCloser, error) {
+				var source []byte
+				switch path {
+				case "google/protobuf/descriptor.proto":
+					source = fakeDescriptorProto
+				case "a.proto":
+					source = extensionDeclarationProto
+				default:
+					t.Fatal("Unexpected path ", path)
+				}
+				return io.NopCloser(bytes.NewReader(source)), nil
+			},
+		},
+	}).Compile(ctx, "a.proto")
+	require.NoError(t, err)
+
+	extensionFile := extFiles.FindFileByPath("a.proto")
+	require.NotNil(t, extensionFile)
+
+	resolver := &protoregistry.Types{}
+	extensionDescriptor := extensionFile.Extensions().Get(0)
+	extensionType := dynamicpb.NewExtensionType(extensionDescriptor)
+	err = resolver.RegisterExtension(extensionType)
+	require.NoError(t, err)
+
 	fileDescriptorProtos, err := compile(ctx, map[string][]byte{
-		"a.proto": []byte(`syntax = "proto3"; package foo; message A {}`),
+		"google/protobuf/descriptor.proto": fakeDescriptorProto,
+		"a.proto": []byte(`
+			syntax = "proto3";
+			package foo;
+			import "google/protobuf/descriptor.proto";
+			extend google.protobuf.FieldOptions { float new_extension = 1000; }
+			message A { int32 field = 1 [(new_extension) = 1.0]; }
+		`),
 	})
 	require.NoError(t, err)
 
@@ -128,11 +175,30 @@ func TestWithUnmarshalOptionsOption(t *testing.T) {
 	err = Run(
 		ctx,
 		Env{Stdin: stdin, Stdout: stdout, Stderr: io.Discard},
-		HandlerFunc(func(_ context.Context, _ PluginEnv, _ ResponseWriter, _ Request) error { return nil }),
-		WithUnmarshalOptions(proto.UnmarshalOptions{RecursionLimit: 1}),
+		HandlerFunc(func(
+			_ context.Context,
+			_ PluginEnv,
+			_ ResponseWriter,
+			request Request,
+		) error {
+			files, err := request.AllFiles()
+			require.NoError(t, err)
+
+			descriptor, err := files.FindDescriptorByName("foo.A.field")
+			require.NoError(t, err)
+
+			options, ok := descriptor.Options().(*descriptorpb.FieldOptions)
+			require.True(t, ok)
+			require.Empty(t, options.ProtoReflect().GetUnknown())
+
+			extensionValue := options.ProtoReflect().Get(extensionDescriptor)
+			require.Equal(t, uint64(0x3f800000), extensionValue.Uint())
+
+			return nil
+		}),
+		WithExtensionTypeResolver(resolver),
 	)
-	require.ErrorIs(t, err, proto.Error)
-	require.ErrorContains(t, err, "exceeded maximum recursion depth")
+	require.NoError(t, err)
 }
 
 func testBasic(
