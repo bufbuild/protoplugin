@@ -38,15 +38,15 @@ type ResponseWriter interface {
 	//
 	// If a file with the same name was already added, or the file name is not cleaned, a warning will be produced.
 	AddFile(name string, content string)
-	// SetError sets the error message on the response.
+	// AddError adds the error message on the response.
 	//
 	// If there is an error with the actual input .proto files that results in your plugin's business logic not being able to be executed
 	// (for example, a missing option), this error should be added to the response via SetError. If there is a system error, the
 	// Handler should return error, which will result in the plugin exiting with a non-zero exit code.
 	//
-	// If there is an existing error message already added, it will be overwritten.
+	// If there is an existing error message already added, the new error will be appended.
 	// Note that empty error messages will be ignored (ie it will be as if no error was set).
-	SetError(message string)
+	AddError(message string)
 	// SetFeatureProto3Optional sets the FEATURE_PROTO3_OPTIONAL feature on the response.
 	//
 	// This function should be preferred over SetSupportedFeatures. Use SetSupportedFeatures only if you need low-level access.
@@ -56,6 +56,9 @@ type ResponseWriter interface {
 	//
 	// This function should be preferred over calling SetSupportedFeatures, SetMinimumEdition, and SetMaximumEdition separately.
 	// Use SetSupportedFeatures, SetMinimumEdition, and SetMaximumEdition only if you need low-level access.
+	//
+	// If this was previously called, the result will be overwritten. That is, if a new minimumEdition and maximumEdition
+	// are specified, the last call wins.
 	//
 	// The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
 	SetFeatureSupportsEditions(minimumEdition descriptorpb.Edition, maximumEdition descriptorpb.Edition)
@@ -89,12 +92,16 @@ type ResponseWriter interface {
 	// If you want to specify that you are supporting editions, it is likely easier to use
 	// SetFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
 	//
+	// If this was previously called, the result will be overwritten.
+	//
 	// The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
 	SetMinimumEdition(minimumEdition int32)
 	// SetMaximumEdition sets the maximum edition.
 	//
 	// If you want to specify that you are supporting editions, it is likely easier to use
 	// SetFeatureSupportsEditions. This function is for those callers needing to have lower-level access.
+	//
+	// If this was previously called, the result will be overwritten.
 	//
 	// The plugin will exit with a non-zero exit code if the minimum edition is greater than the maximum edition.
 	SetMaximumEdition(maximumEdition int32)
@@ -172,7 +179,7 @@ func (r *responseWriter) AddFile(name string, content string) {
 	)
 }
 
-func (r *responseWriter) SetError(message string) {
+func (r *responseWriter) AddError(message string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -180,10 +187,12 @@ func (r *responseWriter) SetError(message string) {
 	// This is also consistent with protoc's behavior.
 	// Ref: https://github.com/protocolbuffers/protobuf/blob/069f989b483e63005f87ab309de130677718bbec/src/google/protobuf/compiler/plugin.proto#L100-L108.
 	if message == "" {
-		r.codeGeneratorResponse.Error = nil
-	} else {
-		r.codeGeneratorResponse.Error = proto.String(message)
+		return
 	}
+	if existingError := r.codeGeneratorResponse.GetError(); existingError != "" {
+		message = existingError + "; " + message
+	}
+	r.codeGeneratorResponse.Error = proto.String(message)
 }
 
 func (r *responseWriter) SetFeatureProto3Optional() {
