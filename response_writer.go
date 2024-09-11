@@ -189,8 +189,7 @@ func (r *responseWriter) AddError(message string) {
 	if message == "" {
 		return
 	}
-	existingError := r.codeGeneratorResponse.GetError()
-	if existingError != "" {
+	if existingError := r.codeGeneratorResponse.GetError(); existingError != "" {
 		message = existingError + "; " + message
 	}
 	r.codeGeneratorResponse.Error = proto.String(message)
