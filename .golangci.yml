@@ -23,21 +23,19 @@ linters:
     - copyloopvar       # only valid for go v1.22 and above
     - cyclop            # covered by gocyclo
     - depguard          # unnecessary for small libraries
-    - execinquery       # deprecated in golangci v1.58 
     - exhaustruct       # many exceptions
-    - exportloopref     # deprecated in golangci v1.60.2
     - funlen            # rely on code review to limit function length
     - gochecknoglobals  # many exceptions
     - gocognit          # dubious "cognitive overhead" quantification
     - gofumpt           # prefer standard gofmt
     - goimports         # rely on gci instead
-    - gomnd             # deprecated in golangci v1.58 in favor of mnd
     - mnd               # some unnamed constants are okay
     - intrange          # only valid for go v1.22 and above
     - ireturn           # "accept interfaces, return structs" isn't ironclad
     - lll               # don't want hard limits for line length
     - maintidx          # covered by gocyclo
     - nlreturn          # generous whitespace violates house style
+    - tenv              # replaced by usetesting
     - testpackage       # internal tests are fine
     - thelper           # we want to print out the whole stack
     - wrapcheck         # don't _always_ need to wrap errors
@@ -69,5 +67,6 @@ issues:
       path: compatibility.go
     - linters:
         - dupl
+        - errcheck
         - forcetypeassert
       path: protopluginutil/source_retention_options_test.go
