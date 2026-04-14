@@ -266,11 +266,12 @@ func validateAndNormalizeCodeGeneratorResponseFilesWithPotentialDuplicates(
 	// Non-nil if non-critical errors should be warnings instead of errors.
 	lenientResponseValidateErrorFunc func(error),
 ) ([]*pluginpb.CodeGeneratorResponse_File, error) {
-	fileNames := make(map[string]struct{})
+	fileNameToFile := make(map[string]*pluginpb.CodeGeneratorResponse_File)
 	resultFiles := make([]*pluginpb.CodeGeneratorResponse_File, 0, len(files))
 	for _, file := range files {
 		name := file.GetName()
 		insertionPoint := file.GetInsertionPoint()
+		content := file.GetContent()
 		normalizedName, err := validateAndNormalizePath(fieldName, name)
 		if err != nil {
 			return nil, err
@@ -286,16 +287,18 @@ func validateAndNormalizeCodeGeneratorResponseFilesWithPotentialDuplicates(
 			}
 		}
 		// If insertionPoint is set, it is valid and correct to have a duplicate file.
-		if _, ok := fileNames[name]; ok && insertionPoint == "" {
-			if lenientResponseValidateErrorFunc != nil {
-				lenientResponseValidateErrorFunc(newDuplicateCodeGeneratorResponseFileNameError(name, true))
-			} else {
-				return nil, fmt.Errorf("%s: %w", fieldName, newDuplicateCodeGeneratorResponseFileNameError(name, false))
+		if otherFile, ok := fileNameToFile[name]; ok && insertionPoint == "" {
+			if otherFile.GetContent() != content {
+				if lenientResponseValidateErrorFunc != nil {
+					lenientResponseValidateErrorFunc(newDuplicateCodeGeneratorResponseFileNameError(name, true))
+				} else {
+					return nil, fmt.Errorf("%s: %w", fieldName, newDuplicateCodeGeneratorResponseFileNameError(name, false))
+				}
 			}
 		} else {
 			// Not a duplicate, add to result files.
 			resultFiles = append(resultFiles, file)
-			fileNames[name] = struct{}{}
+			fileNameToFile[name] = file
 		}
 	}
 	return resultFiles, nil
