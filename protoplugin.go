@@ -162,6 +162,15 @@ func run(
 	handler Handler,
 	opts *opts,
 ) error {
+	if env.Stderr == nil {
+		return errors.New("failed to run: stderr is required")
+	}
+	if env.Stdin == nil {
+		return errors.New("failed to run: stdin is required")
+	}
+	if env.Stdout == nil {
+		return errors.New("failed to run: stdout is required")
+	}
 	switch len(env.Args) {
 	case 0:
 	case 1:
