@@ -2,7 +2,6 @@ protoplugin
 ==============
 
 [![Build](https://github.com/bufbuild/protoplugin/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/bufbuild/protoplugin/actions/workflows/ci.yaml)
-[![Report Card](https://goreportcard.com/badge/github.com/bufbuild/protoplugin)](https://goreportcard.com/report/github.com/bufbuild/protoplugin)
 [![GoDoc](https://pkg.go.dev/badge/github.com/bufbuild/protoplugin.svg)](https://pkg.go.dev/github.com/bufbuild/protoplugin)
 [![Slack](https://img.shields.io/badge/slack-buf-%23e01563)](https://buf.build/links/slack)
 
